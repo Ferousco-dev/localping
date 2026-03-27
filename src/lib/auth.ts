@@ -7,7 +7,7 @@ async function fetchProfile(userId: string): Promise<User | null> {
   if (!supabase) return null
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, email, location, admin_key')
+    .select('id, name, email, location, admin_key, auto_publish')
     .eq('id', userId)
     .single()
   if (error || !data) return null
@@ -17,6 +17,7 @@ async function fetchProfile(userId: string): Promise<User | null> {
     email: data.email,
     location: data.location,
     adminKey: data.admin_key ?? undefined,
+    autoPublish: data.auto_publish ?? undefined,
   }
 }
 
@@ -44,6 +45,7 @@ export async function signUp(input: {
     email: input.email.trim(),
     location: input.location.trim(),
     admin_key: input.adminKey?.trim() || null,
+    auto_publish: false,
   }
 
   const { error: profileError } = await supabase.from('profiles').insert(profile)
@@ -58,6 +60,7 @@ export async function signUp(input: {
       email: profile.email,
       location: profile.location,
       adminKey: profile.admin_key ?? undefined,
+      autoPublish: profile.auto_publish ?? undefined,
     },
   }
 }

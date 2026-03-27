@@ -9,11 +9,13 @@ import Following from './pages/Following'
 import Home from './pages/Home'
 import Likes from './pages/Likes'
 import Login from './pages/Login'
+import Community from './pages/Community'
 import NewsDetail from './pages/NewsDetail'
 import Notifications from './pages/Notifications'
 import Profile from './pages/Profile'
 import Search from './pages/Search'
 import Signup from './pages/Signup'
+import Updates from './pages/Updates'
 
 function App() {
   const [showSplash, setShowSplash] = useState(true)
@@ -41,6 +43,8 @@ function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="news/:id" element={<NewsDetail />} />
+              <Route path="updates" element={<Updates />} />
+              <Route path="community" element={<Community />} />
               <Route path="following" element={<Following />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="profile" element={<Profile />} />

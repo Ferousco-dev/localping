@@ -1,12 +1,11 @@
 import mockNews from '../data/mock-news.json'
-import type { NewsItem } from './types'
+import type { NewsItem, User } from './types'
 import { getCache, invalidateCache, setCache } from './cache'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 const GNEWS_API_KEY = import.meta.env.VITE_GNEWS_API_KEY as string | undefined
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const SHARED_CACHE_TTL = 1000 * 60 * 30
 
 function normalizeLocation(location: string) {
   const clean = location.trim()
@@ -24,6 +23,12 @@ function mapNews(row: {
   url: string | null
   published_at: string | null
   created_at: string
+  category?: string | null
+  news_type?: 'community' | 'update' | null
+  status?: 'pending' | 'approved' | 'rejected'
+  verified?: boolean | null
+  author_id?: string | null
+  author_name?: string | null
 }): NewsItem {
   return {
     id: row.id,
@@ -37,6 +42,12 @@ function mapNews(row: {
     location: row.location ?? undefined,
     url: row.url ?? undefined,
     date: row.published_at || row.created_at,
+    category: row.category ?? undefined,
+    newsType: row.news_type ?? undefined,
+    status: row.status ?? undefined,
+    verified: row.verified ?? undefined,
+    authorId: row.author_id ?? undefined,
+    authorName: row.author_name ?? undefined,
   }
 }
 
@@ -196,114 +207,87 @@ async function getNewsCacheByIds(ids: string[]): Promise<NewsItem[]> {
   return ids.map((id) => lookup.get(id)).filter(Boolean) as NewsItem[]
 }
 
+async function getNewsByIds(ids: string[]): Promise<NewsItem[]> {
+  if (!supabase || ids.length === 0) return []
+  const { data, error } = await supabase.from('news').select('*').in('id', ids)
+  if (error || !data) return []
+  const lookup = new Map(data.map((row) => [row.id, mapNews(row)]))
+  return ids.map((id) => lookup.get(id)).filter(Boolean) as NewsItem[]
+}
+
 function cacheLatest(items: NewsItem[]) {
   if (!items.length) return
   setCache('news:latest', items)
 }
 
-function shuffle<T>(items: T[]) {
-  const copy = [...items]
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
-  }
-  return copy
-}
-
-async function getSharedNewsPool(): Promise<NewsItem[]> {
+async function getApprovedCommunityNews(location: string, category?: string): Promise<NewsItem[]> {
   if (!supabase) return []
-  const { data, error } = await supabase
-    .from('news_cache')
+  let query = supabase
+    .from('news')
     .select('*')
+    .eq('news_type', 'community')
+    .eq('status', 'approved')
+    .in('location', [location, 'All'])
     .order('published_at', { ascending: false })
     .limit(50)
+  if (category && category !== 'all') {
+    query = query.eq('category', category)
+  }
+  const { data, error } = await query
   if (error || !data) return []
-  const items = data.map((row) => ({
-    id: row.id,
-    title: row.title,
-    description: row.description || 'Local update',
-    content: row.content || row.description || 'Full story available at source.',
-    image:
-      row.image ||
-      'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=640&q=80',
-    source: row.source || 'Local Wire',
-    url: row.url || undefined,
-    location: row.location || undefined,
-    date: row.published_at || row.created_at,
-  })) as NewsItem[]
-  return shuffle(items)
-}
-
-async function shouldRefreshSharedPool(): Promise<boolean> {
-  if (!supabase) return true
-  const { data, error } = await supabase
-    .from('news_cache')
-    .select('created_at')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error || !data?.created_at) return true
-  const last = new Date(data.created_at).getTime()
-  return Date.now() - last > SHARED_CACHE_TTL
+  return data.map(mapNews)
 }
 
 export async function getNewsByLocation(location: string): Promise<NewsItem[]> {
+  return getCommunityNewsByLocation(location)
+}
+
+export async function getCommunityNewsByLocation(location: string, category?: string): Promise<NewsItem[]> {
   const requestedLocation = normalizeLocation(location)
-  const cacheKey = `news:shared`
+  const cacheKey = `news:community:${requestedLocation}:${category || 'all'}`
   const cached = getCache<NewsItem[]>(cacheKey)
   if (cached) return cached
 
   if (supabase) {
-    const sharedItems = await getSharedNewsPool()
-    if (sharedItems.length) {
-      setCache(cacheKey, sharedItems)
-      cacheLatest(sharedItems)
-      const refresh = await shouldRefreshSharedPool()
-      if (refresh) {
-        const [gnewsItems, punchItems] = await Promise.all([fetchGNews(requestedLocation), fetchPunchNews()])
-        const apiItems = mergeFeed([...gnewsItems, ...punchItems])
-        if (apiItems.length) await persistNewsCache(apiItems)
-      }
-      return sharedItems
+    const communityItems = await getApprovedCommunityNews(requestedLocation, category)
+    if (communityItems.length) {
+      setCache(cacheKey, communityItems)
+      cacheLatest(communityItems)
+      return communityItems
     }
-  }
-
-  const [gnewsItems, punchItems] = await Promise.all([fetchGNews(requestedLocation), fetchPunchNews()])
-  const apiItems = mergeFeed([...gnewsItems, ...punchItems])
-  if (apiItems.length) {
-    setCache(cacheKey, apiItems)
-    cacheLatest(apiItems)
-    await persistNewsCache(apiItems)
-    return apiItems
   }
 
   if (!isSupabaseConfigured || !supabase) {
     const items = getMockNews(requestedLocation)
-    if (items.length) setCache(cacheKey, items)
-    cacheLatest(items)
-    return items
+    const mapped = items.map((item) => ({
+      ...item,
+      newsType: 'community' as const,
+      category: category && category !== 'all' ? category : 'general',
+    }))
+    if (mapped.length) setCache(cacheKey, mapped)
+    cacheLatest(mapped)
+    return mapped
   }
 
   const { data, error } = await supabase
     .from('news')
     .select('*')
+    .eq('news_type', 'community')
+    .eq('status', 'approved')
     .order('published_at', { ascending: false })
     .limit(30)
 
-  if (error || !data) {
+  if (error || !data || data.length === 0) {
     const items = getMockNews(requestedLocation)
-    if (items.length) setCache(cacheKey, items)
-    cacheLatest(items)
-    await persistNewsCache(items)
-    return items
-  }
-
-  if (data.length === 0) {
-    const items = getMockNews(requestedLocation)
-    if (items.length) setCache(cacheKey, items)
-    cacheLatest(items)
-    await persistNewsCache(items)
-    return items
+    const mapped = items.map((item) => ({
+      ...item,
+      newsType: 'community' as const,
+      category: category && category !== 'all' ? category : 'general',
+    }))
+    if (mapped.length) setCache(cacheKey, mapped)
+    cacheLatest(mapped)
+    await persistNewsCache(mapped)
+    return mapped
   }
 
   const items = data.map(mapNews)
@@ -320,6 +304,12 @@ export async function getNewsById(id: string): Promise<NewsItem | null> {
     if (found) return found
   }
   if (supabase) {
+    const { data } = await supabase.from('news').select('*').eq('id', id).maybeSingle()
+    if (data) {
+      const item = mapNews(data)
+      await persistNewsCache([item])
+      return item
+    }
     const cached = await getNewsCacheByIds([id])
     if (cached.length) return cached[0]
   }
@@ -327,11 +317,154 @@ export async function getNewsById(id: string): Promise<NewsItem | null> {
     const found = (mockNews as NewsItem[]).find((item) => item.id === id)
     return found ?? null
   }
-  const { data, error } = await supabase.from('news').select('*').eq('id', id).single()
+  return null
+}
+
+export async function getUpdatesNews(): Promise<NewsItem[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('news')
+    .select('*')
+    .eq('news_type', 'update')
+    .eq('status', 'approved')
+    .order('published_at', { ascending: false })
+    .limit(50)
+  if (error || !data) return []
+  return data.map(mapNews)
+}
+
+export async function getApiUpdates(location: string): Promise<NewsItem[]> {
+  const requestedLocation = normalizeLocation(location)
+  const cacheKey = `news:api:${requestedLocation}`
+  const cached = getCache<NewsItem[]>(cacheKey)
+  if (cached) return cached
+  const [gnewsItems, punchItems] = await Promise.all([fetchGNews(requestedLocation), fetchPunchNews()])
+  const apiItems = mergeFeed([...gnewsItems, ...punchItems]).map((item) => ({
+    ...item,
+    category: 'general',
+    newsType: 'update',
+  }))
+  if (apiItems.length) {
+    setCache(cacheKey, apiItems)
+    await persistNewsCache(apiItems)
+  }
+  return apiItems
+}
+
+export async function submitCommunityNews(input: {
+  title: string
+  description?: string
+  content: string
+  image?: string
+  location?: string
+  category?: string
+  source?: string
+  user: User
+}) {
+  if (!supabase) return null
+  const autoPublish = input.user.autoPublish ?? false
+  const now = new Date().toISOString()
+  const payload = {
+    title: input.title.trim(),
+    description: input.description?.trim() || 'Community update',
+    content: input.content.trim(),
+    image:
+      input.image?.trim() ||
+      'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=640&q=80',
+    source: input.source?.trim() || `${input.user.name} (Community)`,
+    location: input.location?.trim() || 'All',
+    category: input.category?.trim().toLowerCase() || 'general',
+    news_type: 'community',
+    status: autoPublish ? 'approved' : 'pending',
+    verified: autoPublish,
+    author_id: input.user.id,
+    author_name: input.user.name,
+    approved_at: autoPublish ? now : null,
+    published_at: autoPublish ? now : null,
+  }
+  const { data, error } = await supabase.from('news').insert(payload).select('*').single()
   if (error || !data) return null
-  const item = mapNews(data)
-  await persistNewsCache([item])
-  return item
+  if (autoPublish) {
+    await supabase.from('news_cache').upsert(
+      {
+        id: data.id,
+        title: data.title,
+        description: data.description,
+        content: data.content,
+        image: data.image,
+        source: data.source,
+        url: data.url ?? null,
+        location: data.location ?? null,
+        published_at: data.published_at ?? data.created_at,
+      },
+      { onConflict: 'id' },
+    )
+  }
+  return mapNews(data)
+}
+
+export async function getPendingNewsByUser(userId: string) {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('news')
+    .select('*')
+    .eq('status', 'pending')
+    .eq('news_type', 'community')
+    .eq('author_id', userId)
+    .order('created_at', { ascending: false })
+  if (error || !data) return []
+  return data.map(mapNews)
+}
+
+export async function getUserPosts(userId: string) {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('news')
+    .select('*')
+    .eq('author_id', userId)
+    .eq('news_type', 'community')
+    .order('created_at', { ascending: false })
+  if (error || !data) return []
+  return data.map(mapNews)
+}
+
+export async function toggleFlag(userId: string, newsId: string) {
+  if (!supabase) return false
+  const { data } = await supabase
+    .from('flags')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('news_id', newsId)
+    .maybeSingle()
+  if (data?.id) {
+    await supabase.from('flags').delete().eq('id', data.id)
+    return false
+  }
+  await supabase.from('flags').insert({ user_id: userId, news_id: newsId })
+  return true
+}
+
+export async function getFlagStatus(userId: string, newsId: string) {
+  if (!supabase) return false
+  const { data } = await supabase
+    .from('flags')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('news_id', newsId)
+    .maybeSingle()
+  return !!data?.id
+}
+
+export async function getFlaggedNews(userId: string) {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('flags')
+    .select('news_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+  if (error || !data) return []
+  const ids = data.map((row) => row.news_id)
+  return getNewsByIds(ids)
 }
 
 export async function toggleLike(userId: string, newsId: string) {
@@ -408,7 +541,7 @@ export async function getLikedNews(userId: string): Promise<NewsItem[]> {
     .order('created_at', { ascending: false })
   if (error || !data) return []
   const ids = data.map((row) => row.news_id)
-  const items = await getNewsCacheByIds(ids)
+  const items = await getNewsByIds(ids)
   setCache(cacheKey, items)
   cacheLatest(items)
   return items
@@ -426,7 +559,7 @@ export async function getBookmarkedNews(userId: string): Promise<NewsItem[]> {
     .order('created_at', { ascending: false })
   if (error || !data) return []
   const ids = data.map((row) => row.news_id)
-  const items = await getNewsCacheByIds(ids)
+  const items = await getNewsByIds(ids)
   setCache(cacheKey, items)
   cacheLatest(items)
   return items
@@ -458,25 +591,14 @@ export async function searchNews(query: string): Promise<NewsItem[]> {
     return items
   }
   const { data, error } = await supabase
-    .from('news_cache')
+    .from('news')
     .select('*')
+    .eq('status', 'approved')
     .or(`title.ilike.%${term}%,description.ilike.%${term}%`)
     .order('published_at', { ascending: false })
     .limit(50)
   if (error || !data) return []
-  const items = data.map((row) => ({
-    id: row.id,
-    title: row.title,
-    description: row.description || 'Local update',
-    content: row.content || row.description || 'Full story available at source.',
-    image:
-      row.image ||
-      'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=640&q=80',
-    source: row.source || 'Local Wire',
-    url: row.url || undefined,
-    location: row.location || undefined,
-    date: row.published_at || row.created_at,
-  })) as NewsItem[]
+  const items = data.map(mapNews)
   setCache(cacheKey, items)
   cacheLatest(items)
   return items

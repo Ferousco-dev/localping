@@ -4,6 +4,7 @@ export type User = {
   email: string
   location: string
   adminKey?: string
+  autoPublish?: boolean
 }
 
 export type Source = {
@@ -24,6 +25,12 @@ export type NewsItem = {
   date: string
   url?: string
   location?: string
+  category?: string
+  newsType?: 'community' | 'update'
+  status?: 'pending' | 'approved' | 'rejected'
+  verified?: boolean
+  authorId?: string
+  authorName?: string
 }
 
 export type NotificationItem = {

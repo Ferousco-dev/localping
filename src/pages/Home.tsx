@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import NewsCard from '../components/NewsCard'
 import { useAuth } from '../context/AuthContext'
-import { getNewsByLocation } from '../lib/news'
-import { getFollowedSourceIds, getSources } from '../lib/sources'
+import { getCommunityNewsByLocation } from '../lib/news'
 import type { NewsItem } from '../lib/types'
 
 export default function Home() {
@@ -10,16 +9,15 @@ export default function Home() {
   const [news, setNews] = useState<NewsItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'general' | 'following'>('general')
-  const [followedSources, setFollowedSources] = useState<string[]>([])
 
   const location = user?.location || 'Lagos, Nigeria'
+  const incidentCategories = ['traffic', 'accident', 'incident']
 
   useEffect(() => {
     let active = true
     setLoading(true)
     setError('')
-    getNewsByLocation(location)
+    getCommunityNewsByLocation(location)
       .then((items) => {
         if (active) setNews(items)
       })
@@ -34,51 +32,20 @@ export default function Home() {
     }
   }, [location])
 
-  useEffect(() => {
-    let active = true
-    if (!user) {
-      setFollowedSources([])
-      return
-    }
-    Promise.all([getSources(), getFollowedSourceIds(user.id)]).then(([sources, ids]) => {
-      if (!active) return
-      const names = sources.filter((source) => ids.includes(source.id)).map((source) => source.name)
-      setFollowedSources(names)
-    })
-    return () => {
-      active = false
-    }
-  }, [user])
-
-  const filteredNews = useMemo(() => {
-    if (tab === 'general') return news
-    if (!followedSources.length) return []
-    return news.filter((item) => followedSources.includes(item.source))
-  }, [news, tab, followedSources])
+  const latestNews = useMemo(() => news.slice(0, 8), [news])
+  const incidentNews = useMemo(
+    () => news.filter((item) => item.category && incidentCategories.includes(item.category)).slice(0, 6),
+    [news],
+  )
 
   return (
     <section className="lp-page">
       <div className="lp-page-header">
         <div>
-          <h2>Local briefing for {location}</h2>
-          <p>Verified updates from your city and followed sources.</p>
+          <h2>Live updates for {location}</h2>
+          <p>Community reports happening around you right now.</p>
         </div>
         <div className="lp-location-tag">Location · {location}</div>
-      </div>
-
-      <div className="lp-home-tabs">
-        <button
-          className={tab === 'general' ? 'lp-tab-button active' : 'lp-tab-button'}
-          onClick={() => setTab('general')}
-        >
-          General
-        </button>
-        <button
-          className={tab === 'following' ? 'lp-tab-button active' : 'lp-tab-button'}
-          onClick={() => setTab('following')}
-        >
-          Following
-        </button>
       </div>
 
       {loading ? (
@@ -97,15 +64,41 @@ export default function Home() {
         </div>
       ) : error ? (
         <div className="lp-state">{error}</div>
-      ) : tab === 'following' && !user ? (
-        <div className="lp-state">Log in to see news from followed sources.</div>
-      ) : filteredNews.length === 0 ? (
-        <div className="lp-state">No stories yet for this view.</div>
+      ) : news.length === 0 ? (
+        <div className="lp-state">No community updates yet.</div>
       ) : (
-        <div className="lp-news-grid">
-          {filteredNews.map((item) => (
-            <NewsCard key={item.id} item={item} />
-          ))}
+        <div className="lp-stack">
+          <div>
+            <div className="lp-section-header">
+              <div>
+                <h3>Latest reports</h3>
+                <p>Fresh posts from people near you.</p>
+              </div>
+            </div>
+            <div className="lp-news-grid">
+              {latestNews.map((item) => (
+                <NewsCard key={item.id} item={item} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="lp-section-header">
+              <div>
+                <h3>Nearby incidents</h3>
+                <p>Traffic, accidents, and urgent community alerts.</p>
+              </div>
+            </div>
+            {incidentNews.length === 0 ? (
+              <div className="lp-state">No incident reports yet.</div>
+            ) : (
+              <div className="lp-news-grid">
+                {incidentNews.map((item) => (
+                  <NewsCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </section>

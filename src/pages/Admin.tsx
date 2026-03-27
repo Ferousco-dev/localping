@@ -1,16 +1,41 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { addNews, addSource, broadcast, deleteNews, deleteSource, getUserCount } from '../lib/admin'
-import { getNewsByLocation } from '../lib/news'
+import {
+  addNews,
+  addSource,
+  approveNews,
+  broadcast,
+  deleteNews,
+  deleteSource,
+  getPendingNews,
+  getUserCount,
+  getUsers,
+  publishUpdate,
+  updateUserAutoPublish,
+} from '../lib/admin'
+import { getApiUpdates, getUpdatesNews } from '../lib/news'
 import { getSources } from '../lib/sources'
-import type { NewsItem, Source } from '../lib/types'
+import type { NewsItem, Source, User } from '../lib/types'
 
 export default function Admin() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
+  const updateCategories = [
+    'general',
+    'sports',
+    'business',
+    'national',
+    'international',
+    'weather',
+    'infrastructure',
+  ]
+  const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
   const [userCount, setUserCount] = useState(0)
   const [sources, setSources] = useState<Source[]>([])
   const [news, setNews] = useState<NewsItem[]>([])
+  const [pendingNews, setPendingNews] = useState<NewsItem[]>([])
+  const [users, setUsers] = useState<Array<Pick<User, 'id' | 'name' | 'email' | 'autoPublish'>>>([])
+  const [apiUpdates, setApiUpdates] = useState<NewsItem[]>([])
   const [sourceForm, setSourceForm] = useState({ name: '', description: '', url: '' })
   const [newsForm, setNewsForm] = useState({
     title: '',
@@ -19,13 +44,16 @@ export default function Admin() {
     image: '',
     source: '',
     location: 'All',
+    category: updateCategories[0],
   })
   const [broadcastText, setBroadcastText] = useState('')
   const navigate = useNavigate()
   const params = useParams()
-  const activeTab = useMemo<'sources' | 'news' | 'broadcasts'>(() => {
+  const location = user?.location || 'Lagos, Nigeria'
+  const activeTab = useMemo<'sources' | 'news' | 'broadcasts' | 'community' | 'api'>(() => {
     const tab = params.tab
-    if (tab === 'news' || tab === 'broadcasts' || tab === 'sources') return tab
+    if (tab === 'news' || tab === 'broadcasts' || tab === 'sources' || tab === 'community' || tab === 'api')
+      return tab
     return 'sources'
   }, [params.tab])
 
@@ -37,8 +65,11 @@ export default function Admin() {
     if (!isAdmin) return
     getUserCount().then((count) => setUserCount(count))
     getSources().then((items) => setSources(items))
-    getNewsByLocation('Lagos, Nigeria').then((items) => setNews(items))
-  }, [isAdmin])
+    getUpdatesNews().then((items) => setNews(items))
+    getPendingNews().then((items) => setPendingNews(items))
+    getUsers().then((items) => setUsers(items))
+    getApiUpdates(location).then((items) => setApiUpdates(items))
+  }, [isAdmin, location])
 
   if (!isAdmin) {
     return (
@@ -73,14 +104,60 @@ export default function Admin() {
         'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=640&q=80',
       source: newsForm.source || 'Local Ping Desk',
       location: newsForm.location || 'All',
+      category: newsForm.category || 'general',
+      newsType: 'update',
     })
     if (item) setNews([item, ...news])
-    setNewsForm({ title: '', description: '', content: '', image: '', source: '', location: 'All' })
+    setNewsForm({
+      title: '',
+      description: '',
+      content: '',
+      image: '',
+      source: '',
+      location: 'All',
+      category: updateCategories[0],
+    })
   }
 
   const handleDeleteNews = async (id: string) => {
     await deleteNews(id)
     setNews(news.filter((item) => item.id !== id))
+  }
+
+  const handleApproveNews = async (id: string) => {
+    if (!user?.id) return
+    const approved = await approveNews(id, user.id)
+    if (!approved) return
+    setPendingNews((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  const handleRefreshApiUpdates = async () => {
+    const items = await getApiUpdates(location)
+    setApiUpdates(items)
+  }
+
+  const handlePublishUpdate = async (item: NewsItem) => {
+    const published = await publishUpdate(
+      {
+        title: item.title,
+        description: item.description,
+        content: item.content,
+        image: item.image,
+        source: item.source,
+        url: item.url,
+        location: item.location,
+        category: item.category,
+      },
+      user?.id,
+    )
+    if (!published) return
+    setApiUpdates((prev) => prev.filter((update) => update.id !== item.id))
+  }
+
+  const handleToggleAutoPublish = async (target: Pick<User, 'id' | 'autoPublish'>) => {
+    const updated = await updateUserAutoPublish(target.id, !target.autoPublish)
+    if (!updated) return
+    setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
   }
 
   const handleBroadcast = async (event: React.FormEvent) => {
@@ -121,6 +198,18 @@ export default function Admin() {
           onClick={() => navigate('/admin/broadcasts')}
         >
           Broadcasts
+        </button>
+        <button
+          className={activeTab === 'community' ? 'lp-tab-button active' : 'lp-tab-button'}
+          onClick={() => navigate('/admin/community')}
+        >
+          Community
+        </button>
+        <button
+          className={activeTab === 'api' ? 'lp-tab-button active' : 'lp-tab-button'}
+          onClick={() => navigate('/admin/api')}
+        >
+          API updates
         </button>
       </div>
 
@@ -174,7 +263,7 @@ export default function Admin() {
 
         {activeTab === 'news' && (
           <div className="lp-panel">
-          <h3>Add news item</h3>
+          <h3>Add update item</h3>
           <form className="lp-form" onSubmit={handleAddNews}>
             <label>
               Title
@@ -221,6 +310,19 @@ export default function Admin() {
                 onChange={(event) => setNewsForm({ ...newsForm, location: event.target.value })}
               />
             </label>
+            <label>
+              Category
+              <select
+                value={newsForm.category}
+                onChange={(event) => setNewsForm({ ...newsForm, category: event.target.value })}
+              >
+                {updateCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {formatLabel(category)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button className="lp-button" type="submit">
               Publish
             </button>
@@ -258,6 +360,75 @@ export default function Admin() {
               Send broadcast
             </button>
           </form>
+          </div>
+        )}
+
+        {activeTab === 'community' && (
+          <>
+            <div className="lp-panel">
+              <h3>Pending community posts</h3>
+              <p>Approve updates before they appear in the feed.</p>
+              <div className="lp-stack">
+                {pendingNews.length === 0 && <div className="lp-state">No posts waiting.</div>}
+                {pendingNews.map((item) => (
+                  <div key={item.id} className="lp-inline-row">
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.authorName ? `By ${item.authorName}` : item.source}</p>
+                    </div>
+                    <button className="lp-button" onClick={() => handleApproveNews(item.id)}>
+                      Approve
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="lp-panel">
+              <h3>Auto-post permissions</h3>
+              <p>Enable trusted users to publish without approval.</p>
+              <div className="lp-stack">
+                {users.length === 0 && <div className="lp-state">No users found.</div>}
+                {users.map((item) => (
+                  <div key={item.id} className="lp-inline-row">
+                    <div>
+                      <strong>{item.name}</strong>
+                      <p>{item.email}</p>
+                    </div>
+                    <button className="lp-button ghost" onClick={() => handleToggleAutoPublish(item)}>
+                      {item.autoPublish ? 'Disable auto-post' : 'Enable auto-post'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'api' && (
+          <div className="lp-panel">
+            <div className="lp-panel-header">
+              <div>
+                <h3>API news updates</h3>
+                <p>Send curated API stories into the Updates tab.</p>
+              </div>
+              <button className="lp-button secondary" onClick={handleRefreshApiUpdates}>
+                Refresh feed
+              </button>
+            </div>
+            <div className="lp-stack">
+              {apiUpdates.length === 0 && <div className="lp-state">No API updates found.</div>}
+              {apiUpdates.map((item) => (
+                <div key={item.id} className="lp-inline-row">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <p>{item.source}</p>
+                  </div>
+                  <button className="lp-button" onClick={() => handlePublishUpdate(item)}>
+                    Send to Updates
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -52,9 +52,14 @@ export default function NewsDetail() {
         <div className="lp-article-hero">
           <img src={news.image} alt={news.title} />
           <div className="lp-article-meta">
-            <span>{news.source}</span>
+            <span>{news.authorName || news.source}</span>
             <span>{new Date(news.date).toLocaleString()}</span>
           </div>
+        </div>
+        <div className="lp-article-tags">
+          {news.category && <span className="lp-chip">{news.category}</span>}
+          {news.newsType === 'update' && <span className="lp-chip accent">Update</span>}
+          {news.verified && <span className="lp-chip verified">Verified</span>}
         </div>
         <h1>{news.title}</h1>
         <p className="lp-article-description">{news.description}</p>

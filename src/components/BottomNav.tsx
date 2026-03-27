@@ -1,10 +1,10 @@
-import { Bell, Home, Layers, User } from 'lucide-react'
+import { Home, Newspaper, Users, User } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const links = [
   { to: '/', label: 'Home', icon: Home },
-  { to: '/following', label: 'Following', icon: Layers },
-  { to: '/notifications', label: 'Notifications', icon: Bell },
+  { to: '/updates', label: 'Updates', icon: Newspaper },
+  { to: '/community', label: 'Community', icon: Users },
   { to: '/profile', label: 'Profile', icon: User },
 ]
 

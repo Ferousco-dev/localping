@@ -1,8 +1,16 @@
-import { Bookmark, Heart, Share2, X } from 'lucide-react'
+import { Bookmark, Flag, Heart, Share2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import type { NewsItem } from '../lib/types'
-import { getBookmarkStatus, getLikeStatus, shareNews, toggleBookmark, toggleLike } from '../lib/news'
+import {
+  getBookmarkStatus,
+  getFlagStatus,
+  getLikeStatus,
+  shareNews,
+  toggleBookmark,
+  toggleFlag,
+  toggleLike,
+} from '../lib/news'
 
 export default function ActionBar({
   newsId,
@@ -16,6 +24,7 @@ export default function ActionBar({
   const { user } = useAuth()
   const [liked, setLiked] = useState(false)
   const [bookmarked, setBookmarked] = useState(false)
+  const [flagged, setFlagged] = useState(false)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -25,11 +34,12 @@ export default function ActionBar({
       setBookmarked(false)
       return
     }
-    Promise.all([getLikeStatus(user.id, newsId), getBookmarkStatus(user.id, newsId)]).then(
-      ([likeStatus, bookmarkStatus]) => {
+    Promise.all([getLikeStatus(user.id, newsId), getBookmarkStatus(user.id, newsId), getFlagStatus(user.id, newsId)]).then(
+      ([likeStatus, bookmarkStatus, flagStatus]) => {
         if (!active) return
         setLiked(likeStatus)
         setBookmarked(bookmarkStatus)
+        setFlagged(flagStatus)
       },
     )
     return () => {
@@ -65,6 +75,12 @@ export default function ActionBar({
     setOpen(true)
   }
 
+  const handleFlag = async () => {
+    if (!user) return
+    const next = await toggleFlag(user.id, newsId)
+    setFlagged(next)
+  }
+
   return (
     <div className="lp-action-bar">
       <button className={liked ? 'lp-action active' : 'lp-action'} onClick={handleLike}>
@@ -78,6 +94,10 @@ export default function ActionBar({
       <button className="lp-action" onClick={handleShare}>
         <Share2 size={18} />
         Share
+      </button>
+      <button className={flagged ? 'lp-action active' : 'lp-action'} onClick={handleFlag}>
+        <Flag size={18} />
+        Flag
       </button>
       {open && (
         <div className="lp-share-modal" role="dialog" aria-modal="true">
