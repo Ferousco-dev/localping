@@ -1,4 +1,5 @@
 import type { User } from './types'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 export const ADMIN_KEY = 'LOCALPING-ADMIN'
@@ -21,6 +22,28 @@ async function fetchProfile(userId: string): Promise<User | null> {
   }
 }
 
+function buildProfilePayload(authUser: SupabaseUser, fallback?: { name?: string; location?: string; adminKey?: string }) {
+  const meta = authUser.user_metadata || {}
+  return {
+    id: authUser.id,
+    name: (meta.name as string) || fallback?.name || 'LocalPing User',
+    email: authUser.email || '',
+    location: (meta.location as string) || fallback?.location || 'Lagos, Nigeria',
+    admin_key: (meta.admin_key as string) || fallback?.adminKey || null,
+    auto_publish: false,
+  }
+}
+
+async function ensureProfile(authUser: SupabaseUser, fallback?: { name?: string; location?: string; adminKey?: string }) {
+  const existing = await fetchProfile(authUser.id)
+  if (existing) return existing
+  if (!supabase) return null
+  const payload = buildProfilePayload(authUser, fallback)
+  const { error } = await supabase.from('profiles').insert(payload)
+  if (error) return null
+  return fetchProfile(authUser.id)
+}
+
 export async function signUp(input: {
   name: string
   email: string
@@ -34,33 +57,35 @@ export async function signUp(input: {
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
     password: input.password,
+    options: {
+      data: {
+        name: input.name.trim(),
+        location: input.location.trim(),
+        admin_key: input.adminKey?.trim() || null,
+      },
+    },
   })
   if (error || !data.user) {
     return { user: null, error: error?.message || 'Unable to create account.' }
   }
 
-  const profile = {
-    id: data.user.id,
-    name: input.name.trim(),
-    email: input.email.trim(),
-    location: input.location.trim(),
-    admin_key: input.adminKey?.trim() || null,
-    auto_publish: false,
-  }
-
-  const { error: profileError } = await supabase.from('profiles').insert(profile)
-  if (profileError) {
-    return { user: null, error: profileError.message }
+  if (data.session) {
+    const profile = await ensureProfile(data.user, {
+      name: input.name.trim(),
+      location: input.location.trim(),
+      adminKey: input.adminKey?.trim(),
+    })
+    if (profile) return { user: profile }
   }
 
   return {
     user: {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      location: profile.location,
-      adminKey: profile.admin_key ?? undefined,
-      autoPublish: profile.auto_publish ?? undefined,
+      id: data.user.id,
+      name: input.name.trim(),
+      email: input.email.trim(),
+      location: input.location.trim(),
+      adminKey: input.adminKey?.trim() || undefined,
+      autoPublish: false,
     },
   }
 }
@@ -80,10 +105,11 @@ export async function login(input: {
     return { user: null, error: error?.message || 'Invalid email or password.' }
   }
 
-  const profile = await fetchProfile(data.user.id)
+  let profile = await fetchProfile(data.user.id)
   if (!profile) {
-    return { user: null, error: 'Profile not found.' }
+    profile = await ensureProfile(data.user)
   }
+  if (!profile) return { user: null, error: 'Profile not found.' }
 
   return { user: profile }
 }
@@ -97,7 +123,9 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!supabase) return null
   const { data, error } = await supabase.auth.getUser()
   if (error || !data.user) return null
-  return fetchProfile(data.user.id)
+  const profile = await fetchProfile(data.user.id)
+  if (profile) return profile
+  return ensureProfile(data.user)
 }
 
 export async function updateUser(nextUser: User) {

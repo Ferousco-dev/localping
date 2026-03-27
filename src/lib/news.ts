@@ -342,7 +342,7 @@ export async function getApiUpdates(location: string): Promise<NewsItem[]> {
   const apiItems = mergeFeed([...gnewsItems, ...punchItems]).map((item) => ({
     ...item,
     category: 'general',
-    newsType: 'update',
+    newsType: 'update' as const,
   }))
   if (apiItems.length) {
     setCache(cacheKey, apiItems)
