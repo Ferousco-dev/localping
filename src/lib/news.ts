@@ -209,9 +209,20 @@ async function getNewsCacheByIds(ids: string[]): Promise<NewsItem[]> {
 
 async function getNewsByIds(ids: string[]): Promise<NewsItem[]> {
   if (!supabase || ids.length === 0) return []
-  const { data, error } = await supabase.from('news').select('*').in('id', ids)
-  if (error || !data) return []
-  const lookup = new Map(data.map((row) => [row.id, mapNews(row)]))
+  const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  const dbIds = ids.filter(isUuid)
+  const cacheIds = ids.filter((id) => !isUuid(id))
+  const [dbItems, cachedItems] = await Promise.all([
+    dbIds.length
+      ? supabase.from('news').select('*').in('id', dbIds)
+      : Promise.resolve({ data: [], error: null }),
+    cacheIds.length ? getNewsCacheByIds(cacheIds) : Promise.resolve([] as NewsItem[]),
+  ])
+  if (dbItems.error) return cachedItems
+  const lookup = new Map<string, NewsItem>()
+  dbItems.data?.forEach((row) => lookup.set(row.id, mapNews(row)))
+  cachedItems.forEach((item) => lookup.set(item.id, item))
   return ids.map((id) => lookup.get(id)).filter(Boolean) as NewsItem[]
 }
 
