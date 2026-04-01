@@ -13,6 +13,7 @@ import Community from './pages/Community'
 import NewsDetail from './pages/NewsDetail'
 import Notifications from './pages/Notifications'
 import Profile from './pages/Profile'
+import Post from './pages/Post'
 import Search from './pages/Search'
 import Signup from './pages/Signup'
 import Updates from './pages/Updates'
@@ -48,6 +49,7 @@ function App() {
               <Route path="following" element={<Following />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="post" element={<Post />} />
               <Route path="likes" element={<Likes />} />
               <Route path="bookmarks" element={<Bookmarks />} />
               <Route path="admin">

@@ -42,10 +42,8 @@ export default function Home() {
     <section className="lp-page">
       <div className="lp-page-header">
         <div>
-          <h2>Live updates for {location}</h2>
-          <p>Community reports happening around you right now.</p>
+          <h2>Community feed</h2>
         </div>
-        <div className="lp-location-tag">Location · {location}</div>
       </div>
 
       {loading ? (
@@ -72,7 +70,6 @@ export default function Home() {
             <div className="lp-section-header">
               <div>
                 <h3>Latest reports</h3>
-                <p>Fresh posts from people near you.</p>
               </div>
             </div>
             <div className="lp-news-grid">

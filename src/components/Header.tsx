@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-
 export default function Header() {
-  const { isAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [expanded, setExpanded] = useState(false)
@@ -62,11 +59,6 @@ export default function Header() {
           Go
         </button>
       </form>
-      {isAdmin && (
-        <Link to="/admin" className="lp-admin-button">
-          Admin
-        </Link>
-      )}
     </header>
   )
 }
