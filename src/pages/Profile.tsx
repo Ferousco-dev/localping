@@ -131,6 +131,11 @@ function ProfileContent({
         <Link to="/activities" className="lp-cta-secondary">
           Activities
         </Link>
+        {isAdmin && (
+          <Link to="/admin" className="lp-cta-admin">
+            Admin Panel
+          </Link>
+        )}
       </div>
 
       {/* Settings Modal */}
