@@ -30,9 +30,15 @@ export default function ActionBar({
   useEffect(() => {
     let active = true
     if (!user) {
-      setLiked(false)
-      setBookmarked(false)
-      return
+      Promise.resolve().then(() => {
+        if (!active) return
+        setLiked(false)
+        setBookmarked(false)
+        setFlagged(false)
+      })
+      return () => {
+        active = false
+      }
     }
     Promise.all([getLikeStatus(user.id, newsId), getBookmarkStatus(user.id, newsId), getFlagStatus(user.id, newsId)]).then(
       ([likeStatus, bookmarkStatus, flagStatus]) => {

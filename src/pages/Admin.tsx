@@ -73,7 +73,9 @@ export default function Admin() {
     if (apiUpdatesEnabled) {
       getApiUpdates(location).then((items) => setApiUpdates(items))
     } else {
-      setApiUpdates([])
+      Promise.resolve().then(() => {
+        setApiUpdates([])
+      })
     }
   }, [isAdmin, location, apiUpdatesEnabled])
 

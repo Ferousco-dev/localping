@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { LogOut, Plus, Inbox, AlertCircle } from "lucide-react";
+import {
+  LogOut,
+  Plus,
+  Inbox,
+  AlertCircle,
+  Settings,
+  Check,
+  Flag,
+  Clock,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { updateUser } from "../lib/auth";
@@ -78,7 +87,8 @@ function ProfileContent({
             <div>
               <h1>{user.name}</h1>
               <span className="lp-profile-location-badge">
-                📍 {user.location}
+                <Inbox size={14} style={{ display: "inline" }} />{" "}
+                {user.location}
               </span>
             </div>
             {isAdmin && <span className="lp-admin-badge">ADMIN</span>}
@@ -89,7 +99,7 @@ function ProfileContent({
           onClick={() => setShowSettings(!showSettings)}
           title="Settings"
         >
-          ⚙️
+          <Settings size={20} />
         </button>
       </div>
 
@@ -137,7 +147,7 @@ function ProfileContent({
                 onClick={() => setShowSettings(false)}
                 className="lp-modal-close"
               >
-                ✕
+                <AlertCircle size={20} />
               </button>
             </div>
             <form onSubmit={handleSave} className="lp-modal-form">
@@ -221,7 +231,11 @@ function ProfileContent({
                   >
                     <div className="lp-post-header">
                       <h3>{post.title}</h3>
-                      {post.verified && <span className="lp-verified">✓</span>}
+                      {post.verified && (
+                        <span className="lp-verified">
+                          <Check size={16} />
+                        </span>
+                      )}
                     </div>
                     <p className="lp-post-meta">
                       {post.category} •{" "}
@@ -246,7 +260,9 @@ function ProfileContent({
                   <div key={post.id} className="lp-post-item">
                     <div className="lp-post-header">
                       <h3>{post.title}</h3>
-                      <span className="lp-status-waiting">⏳</span>
+                      <span className="lp-status-waiting">
+                        <Clock size={16} />
+                      </span>
                     </div>
                     <p className="lp-post-meta">
                       Submitted {new Date(post.date).toLocaleDateString()}
@@ -270,7 +286,9 @@ function ProfileContent({
                   <div key={post.id} className="lp-post-item">
                     <div className="lp-post-header">
                       <h3>{post.title}</h3>
-                      <span className="lp-status-flagged">🚩</span>
+                      <span className="lp-status-flagged">
+                        <Flag size={16} />
+                      </span>
                     </div>
                     <p className="lp-post-meta">
                       by {post.authorName || post.source}

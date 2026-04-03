@@ -1,9 +1,27 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getCommunityNewsByLocation } from "../lib/news";
+import {
+  getCommunityNewsByLocation,
+  addComment,
+  getComments,
+  recordView,
+  getViewCount,
+  toggleCommunityLike,
+  getLikeCount,
+  checkUserLiked,
+  getCommentCount,
+} from "../lib/news";
 import type { NewsItem } from "../lib/types";
 import { useSearchParams } from "react-router-dom";
-import { MapPin, MessageCircle, Heart, X } from "lucide-react";
+import {
+  MapPin,
+  X,
+  Eye,
+  MessageCircle,
+  Heart,
+  AlertCircle,
+  Inbox,
+} from "lucide-react";
 
 const categories = [
   "all",
@@ -29,13 +47,19 @@ const categoryColors: Record<string, string> = {
   incident: "#C7CEEA",
 };
 
-type Engagement = {
+type EngagementData = {
   views: number;
-  likes: Set<string>;
-  comments: { id: string; author: string; text: string; timestamp: string }[];
+  likes: number;
+  isLiked: boolean;
+  comments: Array<{
+    id: string;
+    author_name: string;
+    comment_text: string;
+    created_at: string;
+  }>;
 };
 
-type EngagementMap = Record<string, Engagement>;
+type EngagementMap = Record<string, EngagementData>;
 
 export default function Community() {
   const { user } = useAuth();
@@ -53,6 +77,7 @@ export default function Community() {
   const [engagement, setEngagement] = useState<EngagementMap>({});
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   const formatLabel = (value: string) =>
     value.charAt(0).toUpperCase() + value.slice(1);
@@ -69,121 +94,104 @@ export default function Community() {
     return posted.toLocaleDateString();
   };
 
-  // Load engagement from localStorage
-  useEffect(() => {
+  const loadEngagementData = async (postId: string) => {
+    if (!postId) return;
     try {
-      const stored = localStorage.getItem("community_engagement");
-      if (stored) {
-        const data = JSON.parse(stored);
-        // Convert likes arrays back to Sets
-        const converted: EngagementMap = {};
-        for (const [postId, eng] of Object.entries(data)) {
-          converted[postId] = {
-            ...(eng as Engagement),
-            likes: new Set((eng as any).likes || []),
-          };
-        }
-        setEngagement(converted);
-      }
+      const [viewsCount, likesCount, isLiked, comments] = await Promise.all([
+        getViewCount(postId),
+        getLikeCount(postId),
+        user?.id ? checkUserLiked(postId, user.id) : Promise.resolve(false),
+        getComments(postId),
+      ]);
+
+      setEngagement((prev) => ({
+        ...prev,
+        [postId]: {
+          views: viewsCount || 0,
+          likes: likesCount || 0,
+          isLiked: isLiked || false,
+          comments: comments || [],
+        },
+      }));
     } catch (e) {
       console.error("Failed to load engagement data:", e);
     }
-  }, []);
-
-  // Save engagement to localStorage
-  const saveEngagement = (newEngagement: EngagementMap) => {
-    try {
-      const toStore: Record<string, any> = {};
-      for (const [postId, eng] of Object.entries(newEngagement)) {
-        toStore[postId] = {
-          ...eng,
-          likes: Array.from(eng.likes),
-        };
-      }
-      localStorage.setItem("community_engagement", JSON.stringify(toStore));
-    } catch (e) {
-      console.error("Failed to save engagement data:", e);
-    }
   };
 
-  const getEngagement = (postId: string): Engagement => {
+  const getEngagement = (postId: string): EngagementData => {
     return (
       engagement[postId] || {
         views: 0,
-        likes: new Set(),
+        likes: 0,
+        isLiked: false,
         comments: [],
       }
     );
   };
 
-  const incrementViews = (postId: string) => {
-    setEngagement((prev) => {
-      const newEng = { ...prev };
-      if (!newEng[postId]) {
-        newEng[postId] = {
-          views: 1,
-          likes: new Set(),
-          comments: [],
-        };
-      } else {
-        newEng[postId] = {
-          ...newEng[postId],
-          views: newEng[postId].views + 1,
-        };
-      }
-      saveEngagement(newEng);
-      return newEng;
-    });
+  const incrementViews = async (postId: string) => {
+    if (!postId) return;
+    try {
+      await recordView(postId, user?.id);
+      const newCount = await getViewCount(postId);
+      setEngagement((prev) => ({
+        ...prev,
+        [postId]: {
+          ...getEngagement(postId),
+          views: newCount || 0,
+        },
+      }));
+    } catch (e) {
+      console.error("Error recording view:", e);
+    }
   };
 
-  const toggleLike = (postId: string) => {
-    setEngagement((prev) => {
-      const newEng = { ...prev };
-      if (!newEng[postId]) {
-        newEng[postId] = {
-          views: 0,
-          likes: new Set([user?.id || "anonymous"]),
-          comments: [],
-        };
-      } else {
-        const newLikes = new Set(newEng[postId].likes);
-        const userId = user?.id || "anonymous";
-        if (newLikes.has(userId)) {
-          newLikes.delete(userId);
-        } else {
-          newLikes.add(userId);
-        }
-        newEng[postId] = {
-          ...newEng[postId],
-          likes: newLikes,
-        };
-      }
-      saveEngagement(newEng);
-      return newEng;
-    });
+  const toggleLike = async (postId: string) => {
+    if (!postId || !user?.id) return;
+    try {
+      await toggleCommunityLike(postId, user.id);
+      const [likesCount, isLiked] = await Promise.all([
+        getLikeCount(postId),
+        checkUserLiked(postId, user.id),
+      ]);
+
+      setEngagement((prev) => ({
+        ...prev,
+        [postId]: {
+          ...getEngagement(postId),
+          likes: likesCount || 0,
+          isLiked: isLiked || false,
+        },
+      }));
+    } catch (e) {
+      console.error("Error toggling like:", e);
+    }
   };
 
-  const addComment = (postId: string, text: string) => {
-    if (!text.trim()) return;
-    setEngagement((prev) => {
-      const newEng = { ...prev };
-      if (!newEng[postId]) {
-        newEng[postId] = {
-          views: 0,
-          likes: new Set(),
-          comments: [],
-        };
-      }
-      newEng[postId].comments.push({
-        id: Date.now().toString(),
-        author: user?.name || "Anonymous",
-        text: text.trim(),
-        timestamp: new Date().toISOString(),
-      });
-      saveEngagement(newEng);
-      return newEng;
-    });
-    setCommentText("");
+  const submitComment = async (postId: string, text: string) => {
+    if (!postId || !text.trim() || !user?.id) return;
+
+    setSubmittingComment(true);
+    try {
+      await addComment(postId, user.name, text.trim(), user.id);
+      setCommentText("");
+
+      // Reload comments
+      const comments = await getComments(postId);
+      const commentsCount = await getCommentCount(postId);
+
+      setEngagement((prev) => ({
+        ...prev,
+        [postId]: {
+          ...getEngagement(postId),
+          comments: comments || [],
+        },
+      }));
+    } catch (e) {
+      console.error("Error submitting comment:", e);
+    } finally {
+      setSubmittingComment(false);
+    }
   };
 
   useEffect(() => {
@@ -198,7 +206,13 @@ export default function Community() {
         : "all";
     getCommunityNewsByLocation(location, activeCategory, kindFilter)
       .then((items) => {
-        if (active) setPosts(items);
+        if (active) {
+          setPosts(items);
+          // Load engagement data for all posts
+          items.forEach((item) => {
+            loadEngagementData(item.id);
+          });
+        }
       })
       .catch(() => {
         if (active) setError("Unable to load community updates.");
@@ -280,64 +294,143 @@ export default function Community() {
           </div>
         ) : error ? (
           <div className="lp-feed-empty">
-            <div className="lp-empty-icon">⚠️</div>
+            <div className="lp-empty-icon">
+              <AlertCircle size={48} />
+            </div>
             <p>{error}</p>
           </div>
         ) : posts.length === 0 ? (
           <div className="lp-feed-empty">
-            <div className="lp-empty-icon">📭</div>
+            <div className="lp-empty-icon">
+              <Inbox size={48} />
+            </div>
             <p>No community posts yet for this category.</p>
           </div>
         ) : (
-          posts.map((item) => (
-            <Link
-              key={item.id}
-              to={`/news/${item.id}`}
-              className="lp-feed-item"
-            >
-              <div className="lp-feed-item-content">
-                <div className="lp-feed-header">
-                  <div className="lp-feed-meta">
-                    <span className="lp-feed-source">{item.source}</span>
-                    <span className="lp-feed-time">
-                      {getTimeAgo(item.date)}
+          posts.map((item) => {
+            const eng = getEngagement(item.id);
+            return (
+              <div key={item.id} className="lp-feed-item">
+                <div className="lp-feed-item-content">
+                  <div className="lp-feed-header">
+                    <div className="lp-feed-meta">
+                      <span className="lp-feed-source">{item.source}</span>
+                      <span className="lp-feed-time">
+                        {getTimeAgo(item.date)}
+                      </span>
+                    </div>
+                    <span
+                      className="lp-feed-category"
+                      style={{
+                        backgroundColor:
+                          categoryColors[item.category || "all"] || "#ddd",
+                      }}
+                    >
+                      {item.category ? formatLabel(item.category) : "News"}
                     </span>
                   </div>
-                  <span
-                    className="lp-feed-category"
-                    style={{
-                      backgroundColor:
-                        categoryColors[item.category || "all"] || "#ddd",
-                    }}
-                  >
-                    {item.category ? formatLabel(item.category) : "News"}
-                  </span>
-                </div>
-                <h3 className="lp-feed-title">{item.title}</h3>
-                {item.description && (
-                  <p className="lp-feed-description">{item.description}</p>
-                )}
-                {item.image && (
-                  <div className="lp-feed-image">
-                    <img src={item.image} alt={item.title} />
+                  <h3 className="lp-feed-title">{item.title}</h3>
+                  {item.description && (
+                    <p className="lp-feed-description">{item.description}</p>
+                  )}
+                  {item.image && (
+                    <div className="lp-feed-image">
+                      <img src={item.image} alt={item.title} />
+                    </div>
+                  )}
+                  <div className="lp-feed-footer">
+                    <span
+                      className="lp-feed-stat"
+                      onClick={() => incrementViews(item.id)}
+                    >
+                      <Eye size={16} />
+                      {eng.views}
+                    </span>
+                    <span
+                      className="lp-feed-stat"
+                      onClick={() => {
+                        setSelectedPostId(item.id);
+                        loadEngagementData(item.id);
+                      }}
+                    >
+                      <MessageCircle size={16} />
+                      {eng.comments.length}
+                    </span>
+                    <button
+                      className={`lp-feed-stat lp-like-btn ${
+                        eng.isLiked ? "liked" : ""
+                      }`}
+                      onClick={() => toggleLike(item.id)}
+                    >
+                      <Heart
+                        size={16}
+                        fill={eng.isLiked ? "currentColor" : "none"}
+                      />
+                      {eng.likes}
+                    </button>
                   </div>
-                )}
-                <div className="lp-feed-footer">
-                  <span className="lp-feed-stat">
-                    👁 {Math.floor(Math.random() * 5000)}
-                  </span>
-                  <span className="lp-feed-stat">
-                    💬 {Math.floor(Math.random() * 100)}
-                  </span>
-                  <span className="lp-feed-stat">
-                    ❤️ {Math.floor(Math.random() * 500)}
-                  </span>
                 </div>
               </div>
-            </Link>
-          ))
+            );
+          })
         )}
       </div>
+
+      {/* Comments Modal */}
+      {selectedPostId && (
+        <div className="lp-comments-modal-overlay">
+          <div className="lp-comments-modal">
+            <div className="lp-modal-header-comments">
+              <h3>Comments</h3>
+              <button
+                className="lp-modal-close"
+                onClick={() => setSelectedPostId(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="lp-comments-list">
+              {getEngagement(selectedPostId).comments.length === 0 ? (
+                <div className="lp-no-comments">
+                  <p>No comments yet. Be the first!</p>
+                </div>
+              ) : (
+                getEngagement(selectedPostId).comments.map((comment) => (
+                  <div key={comment.id} className="lp-comment">
+                    <div className="lp-comment-author">
+                      {comment.author_name}
+                    </div>
+                    <div className="lp-comment-text">
+                      {comment.comment_text}
+                    </div>
+                    <div className="lp-comment-time">
+                      {getTimeAgo(comment.created_at)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="lp-comments-input">
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Add a comment..."
+                className="lp-comment-textarea"
+                disabled={submittingComment}
+              />
+              <button
+                className="lp-comment-submit"
+                onClick={() => submitComment(selectedPostId, commentText)}
+                disabled={submittingComment || !commentText.trim()}
+              >
+                {submittingComment ? "Posting..." : "Post"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

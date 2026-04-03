@@ -17,10 +17,17 @@ export default function Search() {
   useEffect(() => {
     let active = true
     if (!query.trim()) {
-      setItems([])
+      Promise.resolve().then(() => {
+        if (!active) return
+        setItems([])
+        setLoading(false)
+      })
       return
     }
-    setLoading(true)
+    Promise.resolve().then(() => {
+      if (!active) return
+      setLoading(true)
+    })
     searchNews(query)
       .then((data) => {
         if (active) setItems(data)

@@ -13,7 +13,10 @@ export default function Header() {
   useEffect(() => {
     if (!location.pathname.startsWith("/search")) return;
     const params = new URLSearchParams(location.search);
-    setQuery(params.get("q") || "");
+    const nextQuery = params.get("q") || "";
+    Promise.resolve().then(() => {
+      setQuery(nextQuery);
+    });
   }, [location.pathname, location.search]);
 
   useEffect(() => {

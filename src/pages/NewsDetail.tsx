@@ -13,9 +13,16 @@ export default function NewsDetail() {
   useEffect(() => {
     let active = true
     if (!decodedId) {
-      setLoading(false)
+      Promise.resolve().then(() => {
+        if (!active) return
+        setLoading(false)
+      })
       return
     }
+    Promise.resolve().then(() => {
+      if (!active) return
+      setLoading(true)
+    })
     getNewsById(decodedId)
       .then((item) => {
         if (active) setNews(item)
@@ -26,7 +33,7 @@ export default function NewsDetail() {
     return () => {
       active = false
     }
-  }, [id])
+  }, [decodedId])
 
   if (loading) {
     return (

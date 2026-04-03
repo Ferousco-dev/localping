@@ -20,20 +20,19 @@ import Signup from './pages/Signup'
 import Updates from './pages/Updates'
 
 function App() {
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(() => {
+    const hasSeen = window.sessionStorage.getItem('localping_splash_seen')
+    return !hasSeen
+  })
 
   useEffect(() => {
-    const hasSeen = window.sessionStorage.getItem('localping_splash_seen')
-    if (hasSeen) {
-      setShowSplash(false)
-      return
-    }
+    if (!showSplash) return
     const timer = window.setTimeout(() => {
       window.sessionStorage.setItem('localping_splash_seen', 'true')
       setShowSplash(false)
     }, 2000)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [showSplash])
 
   return (
     <AuthProvider>

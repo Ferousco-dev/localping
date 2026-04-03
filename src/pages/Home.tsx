@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { getCommunityNewsByLocation } from '../lib/news'
 import type { NewsItem } from '../lib/types'
 
+const incidentCategories = ['traffic', 'accident', 'incident']
+
 export default function Home() {
   const { user } = useAuth()
   const [news, setNews] = useState<NewsItem[]>([])
@@ -11,12 +13,14 @@ export default function Home() {
   const [error, setError] = useState('')
 
   const location = user?.location || 'Lagos, Nigeria'
-  const incidentCategories = ['traffic', 'accident', 'incident']
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    setError('')
+    Promise.resolve().then(() => {
+      if (!active) return
+      setLoading(true)
+      setError('')
+    })
     getCommunityNewsByLocation(location)
       .then((items) => {
         if (active) setNews(items)
