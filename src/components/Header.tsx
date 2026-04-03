@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 export default function Header() {
   const navigate = useNavigate();
@@ -50,48 +50,41 @@ export default function Header() {
   };
 
   return (
-    <header className="lp-header">
-      <Link to="/" className="lp-brand">
-        <span className="lp-brand-primary">Local</span>
-        <span className="lp-brand-accent">Ping</span>
+    <header className="lp-header-modern">
+      <Link to="/" className="lp-brand-modern">
+        <div className="lp-brand-icon">
+          <span>📍</span>
+        </div>
+        <div className="lp-brand-text">
+          <span className="lp-brand-primary">Local</span>
+          <span className="lp-brand-accent">Ping</span>
+        </div>
       </Link>
       <form
         ref={formRef}
-        className={`lp-search ${expanded ? "expanded" : ""}`}
+        className={`lp-search-modern ${expanded ? "expanded" : ""}`}
         onSubmit={handleSubmit}
       >
-        <button
-          type="button"
-          className="lp-search-icon"
-          onClick={() => setExpanded(true)}
-          aria-label="Search"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"></circle>
-            <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
-          </svg>
-        </button>
+        <Search className="lp-search-icon-modern" size={18} />
         <input
           ref={inputRef}
           type="search"
-          placeholder="Search news..."
+          placeholder="Search updates..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="lp-search-input"
+          className="lp-search-input-modern"
+          aria-label="Search"
         />
         {expanded && (
           <button
             type="button"
-            className="lp-search-close"
+            className="lp-search-clear"
             onClick={handleClose}
-            aria-label="Close search"
+            aria-label="Clear search"
           >
             <X size={18} />
           </button>
         )}
-        <button type="submit" className="lp-search-submit">
-          Search
-        </button>
       </form>
     </header>
   );
