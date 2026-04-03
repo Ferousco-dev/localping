@@ -29,6 +29,19 @@ export default function Notifications() {
     }
   }, [user])
 
+  const stats = useMemo(() => {
+    const total = items.length
+    const admin = items.filter((i) => i.type === 'admin').length
+    const sources = total - admin
+    return { total, admin, sources }
+  }, [items])
+
+  const filtered = useMemo(() => {
+    if (filter === 'admin') return items.filter((i) => i.type === 'admin')
+    if (filter === 'sources') return items.filter((i) => i.type !== 'admin')
+    return items
+  }, [filter, items])
+
   if (!user) {
     return (
       <section className="lp-page">
@@ -54,19 +67,6 @@ export default function Notifications() {
       </section>
     )
   }
-
-  const stats = useMemo(() => {
-    const total = items.length
-    const admin = items.filter((i) => i.type === 'admin').length
-    const sources = total - admin
-    return { total, admin, sources }
-  }, [items])
-
-  const filtered = useMemo(() => {
-    if (filter === 'admin') return items.filter((i) => i.type === 'admin')
-    if (filter === 'sources') return items.filter((i) => i.type !== 'admin')
-    return items
-  }, [filter, items])
 
   return (
     <section className="lp-page">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
   getCommunityNewsByLocation,
@@ -9,7 +9,7 @@ import {
   toggleCommunityLike,
   getLikeCount,
   checkUserLiked,
-  getCommentCount,
+  getCommunityPosts,
 } from "../lib/news";
 import type { NewsItem } from "../lib/types";
 import { useSearchParams } from "react-router-dom";
@@ -94,7 +94,7 @@ export default function Community() {
     return posted.toLocaleDateString();
   };
 
-  const loadEngagementData = async (postId: string) => {
+  const loadEngagementData = useCallback(async (postId: string) => {
     if (!postId) return;
     try {
       const [viewsCount, likesCount, isLiked, comments] = await Promise.all([
@@ -116,7 +116,7 @@ export default function Community() {
     } catch (e) {
       console.error("Failed to load engagement data:", e);
     }
-  };
+  }, [user?.id]);
 
   const getEngagement = (postId: string): EngagementData => {
     return (
@@ -178,7 +178,6 @@ export default function Community() {
 
       // Reload comments
       const comments = await getComments(postId);
-      const commentsCount = await getCommentCount(postId);
 
       setEngagement((prev) => ({
         ...prev,
@@ -196,8 +195,11 @@ export default function Community() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError("");
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError("");
+    });
     const kindFilter =
       activeKind === "updates"
         ? "update"
@@ -223,7 +225,7 @@ export default function Community() {
     return () => {
       active = false;
     };
-  }, [location, activeCategory, activeKind]);
+  }, [location, activeCategory, activeKind, loadEngagementData]);
 
   return (
     <section className="lp-community-feed">

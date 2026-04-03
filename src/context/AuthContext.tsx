@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useContext,
@@ -61,13 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(current);
           fetchInProgressRef.current = false;
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
         // Retry on lock errors
         if (
           isMountedRef.current &&
           retries < maxRetries &&
-          (error?.message?.includes("Lock") ||
-            error?.message?.includes("steal"))
+          (message.includes("Lock") || message.includes("steal"))
         ) {
           retries++;
           fetchInProgressRef.current = false;

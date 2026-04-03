@@ -8,7 +8,7 @@ export default function Updates() {
 
   useEffect(() => {
     if (apiUpdatesEnabled) navigate('/community?tab=updates', { replace: true })
-  }, [apiUpdatesEnabled])
+  }, [apiUpdatesEnabled, navigate])
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
