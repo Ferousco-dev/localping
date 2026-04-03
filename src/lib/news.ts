@@ -1045,3 +1045,41 @@ export async function deleteCommunityPost(
     return false;
   }
 }
+
+export async function deleteNewsPost(
+  postId: string,
+  userId: string
+): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    // Verify the user owns the post
+    const { data: post, error: fetchError } = await supabase
+      .from("news")
+      .select("author_id")
+      .eq("id", postId)
+      .single();
+
+    if (fetchError || !post || post.author_id !== userId) {
+      console.error("Unauthorized to delete post:", fetchError);
+      return false;
+    }
+
+    const { error } = await supabase
+      .from("news")
+      .delete()
+      .eq("id", postId)
+      .eq("author_id", userId);
+
+    if (error) {
+      console.error("Failed to delete news post:", error);
+      return false;
+    }
+
+    invalidateCache("news");
+    invalidateCache("news_cache");
+    return true;
+  } catch (e) {
+    console.error("Error deleting news post:", e);
+    return false;
+  }
+}

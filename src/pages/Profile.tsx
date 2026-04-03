@@ -8,6 +8,7 @@ import {
   Check,
   Flag,
   Clock,
+  Trash2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -17,6 +18,7 @@ import {
   getLikedNews,
   getPendingNewsByUser,
   getUserPosts,
+  deleteNewsPost,
 } from "../lib/news";
 import type { NewsItem, User } from "../lib/types";
 
@@ -44,6 +46,21 @@ function ProfileContent({
   const [userPosts, setUserPosts] = useState<NewsItem[]>([]);
   const [flaggedPosts, setFlaggedPosts] = useState<NewsItem[]>([]);
   const [likedCount, setLikedCount] = useState(0);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm("Are you sure you want to delete this post?")) return;
+
+    setDeletingId(postId);
+    const deleted = await deleteNewsPost(postId, user.id);
+    setDeletingId(null);
+
+    if (deleted) {
+      setUserPosts(userPosts.filter((p) => p.id !== postId));
+      setPendingPosts(pendingPosts.filter((p) => p.id !== postId));
+      setFlaggedPosts(flaggedPosts.filter((p) => p.id !== postId));
+    }
+  };
 
   useEffect(() => {
     getPendingNewsByUser(user.id).then((items) => {
@@ -229,24 +246,36 @@ function ProfileContent({
             ) : (
               <div className="lp-posts-list">
                 {userPosts.map((post) => (
-                  <Link
-                    key={post.id}
-                    to={`/news/${encodeURIComponent(post.id)}`}
-                    className="lp-post-item"
-                  >
-                    <div className="lp-post-header">
-                      <h3>{post.title}</h3>
-                      {post.verified && (
-                        <span className="lp-verified">
-                          <Check size={16} />
-                        </span>
-                      )}
-                    </div>
-                    <p className="lp-post-meta">
-                      {post.category} •{" "}
-                      {post.status === "approved" ? "Live" : "Pending"}
-                    </p>
-                  </Link>
+                  <div key={post.id} className="lp-post-item-container">
+                    <Link
+                      to={`/news/${encodeURIComponent(post.id)}`}
+                      className="lp-post-item"
+                    >
+                      <div className="lp-post-header">
+                        <h3>{post.title}</h3>
+                        {post.verified && (
+                          <span className="lp-verified">
+                            <Check size={16} />
+                          </span>
+                        )}
+                      </div>
+                      <p className="lp-post-meta">
+                        {post.category} •{" "}
+                        {post.status === "approved" ? "Live" : "Pending"}
+                      </p>
+                    </Link>
+                    <button
+                      className="lp-post-delete-btn"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleDeletePost(post.id);
+                      }}
+                      disabled={deletingId === post.id}
+                      title="Delete post"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -262,16 +291,26 @@ function ProfileContent({
             ) : (
               <div className="lp-posts-list">
                 {pendingPosts.map((post) => (
-                  <div key={post.id} className="lp-post-item">
-                    <div className="lp-post-header">
-                      <h3>{post.title}</h3>
-                      <span className="lp-status-waiting">
-                        <Clock size={16} />
-                      </span>
+                  <div key={post.id} className="lp-post-item-container">
+                    <div className="lp-post-item">
+                      <div className="lp-post-header">
+                        <h3>{post.title}</h3>
+                        <span className="lp-status-waiting">
+                          <Clock size={16} />
+                        </span>
+                      </div>
+                      <p className="lp-post-meta">
+                        Submitted {new Date(post.date).toLocaleDateString()}
+                      </p>
                     </div>
-                    <p className="lp-post-meta">
-                      Submitted {new Date(post.date).toLocaleDateString()}
-                    </p>
+                    <button
+                      className="lp-post-delete-btn"
+                      onClick={() => handleDeletePost(post.id)}
+                      disabled={deletingId === post.id}
+                      title="Delete post"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -288,16 +327,26 @@ function ProfileContent({
             ) : (
               <div className="lp-posts-list">
                 {flaggedPosts.map((post) => (
-                  <div key={post.id} className="lp-post-item">
-                    <div className="lp-post-header">
-                      <h3>{post.title}</h3>
-                      <span className="lp-status-flagged">
-                        <Flag size={16} />
-                      </span>
+                  <div key={post.id} className="lp-post-item-container">
+                    <div className="lp-post-item">
+                      <div className="lp-post-header">
+                        <h3>{post.title}</h3>
+                        <span className="lp-status-flagged">
+                          <Flag size={16} />
+                        </span>
+                      </div>
+                      <p className="lp-post-meta">
+                        by {post.authorName || post.source}
+                      </p>
                     </div>
-                    <p className="lp-post-meta">
-                      by {post.authorName || post.source}
-                    </p>
+                    <button
+                      className="lp-post-delete-btn"
+                      onClick={() => handleDeletePost(post.id)}
+                      disabled={deletingId === post.id}
+                      title="Delete post"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
