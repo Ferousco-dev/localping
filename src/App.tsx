@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Splash from './components/Splash'
 import { AuthProvider } from './context/AuthContext'
 import Admin from './pages/Admin'
+import Activities from './pages/Activities'
 import Bookmarks from './pages/Bookmarks'
 import Following from './pages/Following'
 import Home from './pages/Home'
@@ -49,6 +50,7 @@ function App() {
               <Route path="following" element={<Following />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="activities" element={<Activities />} />
               <Route path="post" element={<Post />} />
               <Route path="likes" element={<Likes />} />
               <Route path="bookmarks" element={<Bookmarks />} />

@@ -25,6 +25,7 @@ function mapNews(row: {
   created_at: string
   category?: string | null
   news_type?: 'community' | 'update' | null
+  community_kind?: 'update' | 'post' | null
   status?: 'pending' | 'approved' | 'rejected'
   verified?: boolean | null
   author_id?: string | null
@@ -44,6 +45,7 @@ function mapNews(row: {
     date: row.published_at || row.created_at,
     category: row.category ?? undefined,
     newsType: row.news_type ?? undefined,
+    communityKind: row.community_kind ?? undefined,
     status: row.status ?? undefined,
     verified: row.verified ?? undefined,
     authorId: row.author_id ?? undefined,
@@ -231,7 +233,11 @@ function cacheLatest(items: NewsItem[]) {
   setCache('news:latest', items)
 }
 
-async function getApprovedCommunityNews(location: string, category?: string): Promise<NewsItem[]> {
+async function getApprovedCommunityNews(
+  location: string,
+  category?: string,
+  communityKind?: 'update' | 'post' | 'all',
+): Promise<NewsItem[]> {
   if (!supabase) return []
   let query = supabase
     .from('news')
@@ -241,6 +247,9 @@ async function getApprovedCommunityNews(location: string, category?: string): Pr
     .in('location', [location, 'All'])
     .order('published_at', { ascending: false })
     .limit(50)
+  if (communityKind && communityKind !== 'all') {
+    query = query.eq('community_kind', communityKind)
+  }
   if (category && category !== 'all') {
     query = query.eq('category', category)
   }
@@ -253,14 +262,18 @@ export async function getNewsByLocation(location: string): Promise<NewsItem[]> {
   return getCommunityNewsByLocation(location)
 }
 
-export async function getCommunityNewsByLocation(location: string, category?: string): Promise<NewsItem[]> {
+export async function getCommunityNewsByLocation(
+  location: string,
+  category?: string,
+  communityKind?: 'update' | 'post' | 'all',
+): Promise<NewsItem[]> {
   const requestedLocation = normalizeLocation(location)
-  const cacheKey = `news:community:${requestedLocation}:${category || 'all'}`
+  const cacheKey = `news:community:${requestedLocation}:${communityKind || 'all'}:${category || 'all'}`
   const cached = getCache<NewsItem[]>(cacheKey)
   if (cached) return cached
 
   if (supabase) {
-    const communityItems = await getApprovedCommunityNews(requestedLocation, category)
+    const communityItems = await getApprovedCommunityNews(requestedLocation, category, communityKind)
     if (communityItems.length) {
       setCache(cacheKey, communityItems)
       cacheLatest(communityItems)
@@ -273,6 +286,7 @@ export async function getCommunityNewsByLocation(location: string, category?: st
     const mapped = items.map((item) => ({
       ...item,
       newsType: 'community' as const,
+      communityKind: 'post' as const,
       category: category && category !== 'all' ? category : 'general',
     }))
     if (mapped.length) setCache(cacheKey, mapped)
@@ -288,11 +302,16 @@ export async function getCommunityNewsByLocation(location: string, category?: st
     .order('published_at', { ascending: false })
     .limit(30)
 
+  // If kind filtering is requested, apply it after fetch to avoid breaking old schemas.
+  // Once community_kind is deployed everywhere, this can be moved into the query.
+  const kindFilter = communityKind && communityKind !== 'all' ? communityKind : null
+
   if (error || !data || data.length === 0) {
     const items = getMockNews(requestedLocation)
     const mapped = items.map((item) => ({
       ...item,
       newsType: 'community' as const,
+      communityKind: 'post' as const,
       category: category && category !== 'all' ? category : 'general',
     }))
     if (mapped.length) setCache(cacheKey, mapped)
@@ -301,7 +320,10 @@ export async function getCommunityNewsByLocation(location: string, category?: st
     return mapped
   }
 
-  const items = data.map(mapNews)
+  const items = data
+    .map(mapNews)
+    .filter((item) => (kindFilter ? item.communityKind === kindFilter : true))
+    .filter((item) => (category && category !== 'all' ? item.category === category : true))
   if (items.length) setCache(cacheKey, items)
   cacheLatest(items)
   await persistNewsCache(items)
@@ -336,7 +358,8 @@ export async function getUpdatesNews(): Promise<NewsItem[]> {
   const { data, error } = await supabase
     .from('news')
     .select('*')
-    .eq('news_type', 'update')
+    .eq('news_type', 'community')
+    .eq('community_kind', 'update')
     .eq('status', 'approved')
     .order('published_at', { ascending: false })
     .limit(50)
@@ -370,15 +393,19 @@ export async function submitCommunityNews(input: {
   location?: string
   category?: string
   source?: string
+  communityKind?: 'update' | 'post'
   user: User
 }) {
   if (!supabase) return null
   const autoPublish = input.user.autoPublish ?? false
   const now = new Date().toISOString()
+  const communityKind = input.communityKind ?? 'post'
+  const description = input.description?.trim() || (communityKind === 'update' ? 'Community update' : 'Community post')
+  const content = input.content?.trim() || description || input.title.trim()
   const payload = {
     title: input.title.trim(),
-    description: input.description?.trim() || 'Community update',
-    content: input.content.trim(),
+    description,
+    content,
     image:
       input.image?.trim() ||
       'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=640&q=80',
@@ -386,6 +413,7 @@ export async function submitCommunityNews(input: {
     location: input.location?.trim() || 'All',
     category: input.category?.trim().toLowerCase() || 'general',
     news_type: 'community',
+    community_kind: communityKind,
     status: autoPublish ? 'approved' : 'pending',
     verified: autoPublish,
     author_id: input.user.id,

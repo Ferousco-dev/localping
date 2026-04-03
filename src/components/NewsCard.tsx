@@ -8,12 +8,13 @@ export default function NewsCard({ item }: { item: NewsItem }) {
   const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
   const categoryLabel = item.category || (item.newsType === 'community' ? 'Community' : 'General')
   const sourceLabel = item.authorName || item.source
+  const isUpdate = item.communityKind === 'update' || item.newsType === 'update'
   return (
     <Link to={`/news/${encodeURIComponent(item.id)}`} className="lp-news-card">
       <div className="lp-news-content">
         <div className="lp-news-tags">
           {categoryLabel && <span className="lp-chip">{formatLabel(categoryLabel)}</span>}
-          {item.newsType === 'update' && <span className="lp-chip accent">Update</span>}
+          {isUpdate && <span className="lp-chip accent">Update</span>}
           {item.verified && <span className="lp-chip verified">Verified</span>}
         </div>
         <div className="lp-news-source">{sourceLabel}</div>

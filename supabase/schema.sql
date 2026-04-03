@@ -30,6 +30,7 @@ create table if not exists news (
   location text default 'All',
   category text default 'general',
   news_type text not null default 'community' check (news_type in ('community', 'update')),
+  community_kind text not null default 'post' check (community_kind in ('update', 'post')),
   status text not null default 'approved' check (status in ('pending', 'approved', 'rejected')),
   verified boolean default false,
   author_id uuid references profiles(id) on delete set null,
@@ -39,6 +40,34 @@ create table if not exists news (
   published_at timestamptz default now(),
   created_at timestamptz default now()
 );
+
+alter table news
+  add column if not exists community_kind text;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'news' and column_name = 'community_kind'
+  ) then
+    alter table news
+      alter column community_kind set default 'post';
+    alter table news
+      alter column community_kind set not null;
+    alter table news
+      add constraint if not exists news_community_kind_check
+        check (community_kind in ('update', 'post'));
+  end if;
+end $$;
+
+update news
+set community_kind = 'update', news_type = 'community'
+where news_type = 'update' and (community_kind is null or community_kind = '');
+
+update news
+set community_kind = 'post'
+where news_type = 'community' and (community_kind is null or community_kind = '');
 
 create table if not exists flags (
   id uuid primary key default gen_random_uuid(),

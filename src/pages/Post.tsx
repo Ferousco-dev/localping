@@ -17,6 +17,7 @@ const categories = [
 export default function Post() {
   const { user, loading } = useAuth()
   const [posting, setPosting] = useState(false)
+  const [postKind, setPostKind] = useState<'update' | 'post'>('update')
   const [postForm, setPostForm] = useState({
     title: '',
     description: '',
@@ -38,6 +39,7 @@ export default function Post() {
       image: postForm.image,
       location: postForm.location,
       category: postForm.category,
+      communityKind: postKind,
       user,
     })
     if (submitted) {
@@ -82,10 +84,17 @@ export default function Post() {
   return (
     <section className="lp-page lp-post">
       <div className="lp-post-hero">
-        <h2>Post a community update</h2>
-        <p>Share what is happening around you right now.</p>
+        <h2>Post to Community</h2>
+        <p>Share a quick head-up or a full community post.</p>
       </div>
       <form className="lp-form lp-post-form" onSubmit={handlePost}>
+        <label>
+          Post type
+          <select value={postKind} onChange={(event) => setPostKind(event.target.value as 'update' | 'post')}>
+            <option value="update">Update (brief)</option>
+            <option value="post">Community post</option>
+          </select>
+        </label>
         <label>
           Headline
           <input
@@ -99,6 +108,7 @@ export default function Post() {
           <input
             value={postForm.description}
             onChange={(event) => setPostForm({ ...postForm, description: event.target.value })}
+            required={postKind === 'update'}
           />
         </label>
         <label>
@@ -107,7 +117,7 @@ export default function Post() {
             rows={5}
             value={postForm.content}
             onChange={(event) => setPostForm({ ...postForm, content: event.target.value })}
-            required
+            required={postKind === 'post'}
           />
         </label>
         <label>

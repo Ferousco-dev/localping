@@ -27,6 +27,7 @@ export type NewsItem = {
   location?: string
   category?: string
   newsType?: 'community' | 'update'
+  communityKind?: 'update' | 'post'
   status?: 'pending' | 'approved' | 'rejected'
   verified?: boolean
   authorId?: string

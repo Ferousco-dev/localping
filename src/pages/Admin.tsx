@@ -121,7 +121,8 @@ export default function Admin() {
       source: newsForm.source || 'Local Ping Desk',
       location: newsForm.location || 'All',
       category: newsForm.category || 'general',
-      newsType: 'update',
+      newsType: 'community',
+      communityKind: 'update',
     })
     if (item) setNews([item, ...news])
     setNewsForm({

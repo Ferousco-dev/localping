@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import NotificationItem from '../components/NotificationItem'
+import { Link } from 'react-router-dom'
+import { Bell, Megaphone } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getNotifications } from '../lib/notifications'
 import type { NotificationItem as Notification } from '../lib/types'
+
+type NotificationFilter = 'all' | 'admin' | 'sources'
 
 export default function Notifications() {
   const { user } = useAuth()
   const [items, setItems] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<NotificationFilter>('all')
 
   useEffect(() => {
     let active = true
@@ -50,19 +55,96 @@ export default function Notifications() {
     )
   }
 
+  const stats = useMemo(() => {
+    const total = items.length
+    const admin = items.filter((i) => i.type === 'admin').length
+    const sources = total - admin
+    return { total, admin, sources }
+  }, [items])
+
+  const filtered = useMemo(() => {
+    if (filter === 'admin') return items.filter((i) => i.type === 'admin')
+    if (filter === 'sources') return items.filter((i) => i.type !== 'admin')
+    return items
+  }, [filter, items])
+
   return (
     <section className="lp-page">
-      <div className="lp-page-header">
-        <div>
-          <h2>Notifications</h2>
-          <p>Updates from followed sources and admin broadcasts.</p>
+      <div className="lp-hero">
+        <div className="lp-hero-main">
+          <div className="lp-hero-icon">
+            <Bell size={18} aria-hidden="true" />
+          </div>
+          <div className="lp-hero-copy">
+            <h2>Notifications</h2>
+            <p>Broadcasts and source updates — all in one inbox.</p>
+          </div>
+        </div>
+        <div className="lp-hero-actions">
+          <Link to="/activities" className="lp-button secondary">
+            Activities
+          </Link>
+        </div>
+        <div className="lp-hero-stats">
+          <div>
+            <span>Total</span>
+            <strong>{stats.total}</strong>
+          </div>
+          <div>
+            <span>Admin</span>
+            <strong>{stats.admin}</strong>
+          </div>
+          <div>
+            <span>Sources</span>
+            <strong>{stats.sources}</strong>
+          </div>
         </div>
       </div>
-      {items.length === 0 ? (
-        <div className="lp-state">No notifications yet.</div>
+
+      <div className="lp-segmented" role="tablist" aria-label="Notification filters">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter === 'all'}
+          className={filter === 'all' ? 'lp-segment active' : 'lp-segment'}
+          onClick={() => setFilter('all')}
+        >
+          <Bell size={16} aria-hidden="true" />
+          <span>All</span>
+          <span className="lp-segment-count">{stats.total}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter === 'admin'}
+          className={filter === 'admin' ? 'lp-segment active' : 'lp-segment'}
+          onClick={() => setFilter('admin')}
+        >
+          <Megaphone size={16} aria-hidden="true" />
+          <span>Admin</span>
+          <span className="lp-segment-count">{stats.admin}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter === 'sources'}
+          className={filter === 'sources' ? 'lp-segment active' : 'lp-segment'}
+          onClick={() => setFilter('sources')}
+        >
+          <Bell size={16} aria-hidden="true" />
+          <span>Sources</span>
+          <span className="lp-segment-count">{stats.sources}</span>
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="lp-empty-card">
+          <strong>No notifications yet.</strong>
+          <p>When sources post updates or admins broadcast alerts, you’ll see them here.</p>
+        </div>
       ) : (
         <div className="lp-stack">
-          {items.map((item) => (
+          {filtered.map((item) => (
             <NotificationItem key={item.id} item={item} />
           ))}
         </div>

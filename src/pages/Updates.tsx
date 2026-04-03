@@ -1,33 +1,13 @@
 import { useEffect, useState } from 'react'
-import NewsCard from '../components/NewsCard'
-import { getUpdatesNews } from '../lib/news'
+import { useNavigate } from 'react-router-dom'
 import { getApiUpdatesEnabled } from '../lib/storage'
-import type { NewsItem } from '../lib/types'
 
 export default function Updates() {
-  const [updates, setUpdates] = useState<NewsItem[] | null>(null)
-  const [error, setError] = useState('')
   const [apiUpdatesEnabled, setApiUpdatesEnabled] = useState(getApiUpdatesEnabled())
+  const navigate = useNavigate()
 
   useEffect(() => {
-    if (!apiUpdatesEnabled) return
-    let active = true
-    queueMicrotask(() => {
-      if (active) {
-        setError('')
-        setUpdates(null)
-      }
-    })
-    getUpdatesNews()
-      .then((items) => {
-        if (active) setUpdates(items)
-      })
-      .catch(() => {
-        if (active) setError('Unable to load updates right now.')
-      })
-    return () => {
-      active = false
-    }
+    if (apiUpdatesEnabled) navigate('/community?tab=updates', { replace: true })
   }, [apiUpdatesEnabled])
 
   useEffect(() => {
@@ -51,30 +31,8 @@ export default function Updates() {
 
       {!apiUpdatesEnabled ? (
         <div className="lp-state">Updates are paused by the admin.</div>
-      ) : updates === null && !error ? (
-        <div className="lp-news-grid">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="lp-news-skeleton">
-              <div className="lp-skeleton-content">
-                <span className="lp-skeleton-line sm"></span>
-                <span className="lp-skeleton-line"></span>
-                <span className="lp-skeleton-line lg"></span>
-                <span className="lp-skeleton-line sm"></span>
-              </div>
-              <div className="lp-skeleton-image"></div>
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="lp-state">{error}</div>
-      ) : (updates?.length ?? 0) === 0 ? (
-        <div className="lp-state">No updates published yet.</div>
       ) : (
-        <div className="lp-news-grid">
-          {updates?.map((item) => (
-            <NewsCard key={item.id} item={item} />
-          ))}
-        </div>
+        <div className="lp-state">Redirecting to Community updates…</div>
       )}
     </section>
   )
