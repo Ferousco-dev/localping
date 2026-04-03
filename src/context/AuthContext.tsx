@@ -36,61 +36,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const fetchInProgressRef = useRef(false);
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     // Skip if already fetching (React Strict Mode double-invocation)
     if (fetchInProgressRef.current) return;
 
+    let active = true;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let retries = 0;
     const maxRetries = 2;
 
     const fetchUser = async () => {
-      if (!isMountedRef.current) return;
+      if (!active) return;
       fetchInProgressRef.current = true;
 
       try {
         const current = await auth.getCurrentUser();
-        if (isMountedRef.current) {
-          setUser(current);
-          fetchInProgressRef.current = false;
-        }
+        if (!active) return;
+        setUser(current);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
         // Retry on lock errors
         if (
-          isMountedRef.current &&
+          active &&
           retries < maxRetries &&
           (message.includes("Lock") || message.includes("steal"))
         ) {
           retries++;
-          fetchInProgressRef.current = false;
           timeoutId = setTimeout(fetchUser, 100 * retries);
           return;
         }
-        if (isMountedRef.current) {
+        if (active) {
           console.error("Failed to fetch user:", error);
           setUser(null);
-          fetchInProgressRef.current = false;
         }
       } finally {
-        if (isMountedRef.current) {
+        if (active) {
           setLoading(false);
         }
+        fetchInProgressRef.current = false;
       }
     };
 
     fetchUser();
 
     return () => {
+      active = false;
       if (timeoutId) clearTimeout(timeoutId);
+      fetchInProgressRef.current = false;
     };
   }, []);
 
