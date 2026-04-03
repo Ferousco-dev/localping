@@ -94,29 +94,32 @@ export default function Community() {
     return posted.toLocaleDateString();
   };
 
-  const loadEngagementData = useCallback(async (postId: string) => {
-    if (!postId) return;
-    try {
-      const [viewsCount, likesCount, isLiked, comments] = await Promise.all([
-        getViewCount(postId),
-        getLikeCount(postId),
-        user?.id ? checkUserLiked(postId, user.id) : Promise.resolve(false),
-        getComments(postId),
-      ]);
+  const loadEngagementData = useCallback(
+    async (postId: string) => {
+      if (!postId) return;
+      try {
+        const [viewsCount, likesCount, isLiked, comments] = await Promise.all([
+          getViewCount(postId),
+          getLikeCount(postId),
+          user?.id ? checkUserLiked(postId, user.id) : Promise.resolve(false),
+          getComments(postId),
+        ]);
 
-      setEngagement((prev) => ({
-        ...prev,
-        [postId]: {
-          views: viewsCount || 0,
-          likes: likesCount || 0,
-          isLiked: isLiked || false,
-          comments: comments || [],
-        },
-      }));
-    } catch (e) {
-      console.error("Failed to load engagement data:", e);
-    }
-  }, [user?.id]);
+        setEngagement((prev) => ({
+          ...prev,
+          [postId]: {
+            views: viewsCount || 0,
+            likes: likesCount || 0,
+            isLiked: isLiked || false,
+            comments: comments || [],
+          },
+        }));
+      } catch (e) {
+        console.error("Failed to load engagement data:", e);
+      }
+    },
+    [user?.id]
+  );
 
   const getEngagement = (postId: string): EngagementData => {
     return (
