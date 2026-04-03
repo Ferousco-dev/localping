@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { submitCommunityNews, submitDirectCommunityPost } from "../lib/news";
+import { AlertCircle, CheckCircle } from "lucide-react";
 
 const categories = [
   "traffic",
@@ -16,11 +17,16 @@ const categories = [
 
 export default function Post() {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [posting, setPosting] = useState(false);
   const [postKind, setPostKind] = useState<"update" | "post">("update");
   const [postDestination, setPostDestination] = useState<"news" | "community">(
     "community"
   );
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const [postForm, setPostForm] = useState({
     title: "",
     description: "",
@@ -35,46 +41,93 @@ export default function Post() {
   const handlePost = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user || posting) return;
+
+    setMessage(null);
     setPosting(true);
 
     let submitted = false;
+    let errorMsg = "";
 
-    if (postDestination === "news") {
-      // Submit to news table (requires admin approval)
-      submitted = !!(await submitCommunityNews({
-        title: postForm.title,
-        description: postForm.description,
-        content: postForm.content,
-        image: postForm.image,
-        location: postForm.location,
-        category: postForm.category,
-        communityKind: postKind,
-        user,
-      }));
-    } else {
-      // Submit directly to community posts table (instant)
-      submitted = !!(await submitDirectCommunityPost({
-        title: postForm.title,
-        description: postForm.description,
-        content: postForm.content,
-        image: postForm.image,
-        location: postForm.location,
-        category: postForm.category,
-        user,
-      }));
-    }
+    try {
+      if (postDestination === "news") {
+        // Submit to news table (requires admin approval)
+        console.log("Submitting to news table...");
+        const result = await submitCommunityNews({
+          title: postForm.title,
+          description: postForm.description,
+          content: postForm.content,
+          image: postForm.image,
+          location: postForm.location,
+          category: postForm.category,
+          communityKind: postKind,
+          user,
+        });
 
-    if (submitted) {
-      setPostForm({
-        title: "",
-        description: "",
-        content: "",
-        image: "",
-        location: user.location,
-        category: categories[0],
+        if (result) {
+          submitted = true;
+          setMessage({
+            type: "success",
+            text: "✅ Post submitted for admin review!",
+          });
+        } else {
+          errorMsg = "Failed to submit news post. Please try again.";
+        }
+      } else {
+        // Submit directly to community posts table (instant)
+        console.log("Submitting to community posts table...");
+        const result = await submitDirectCommunityPost({
+          title: postForm.title,
+          description: postForm.description,
+          content: postForm.content,
+          image: postForm.image,
+          location: postForm.location,
+          category: postForm.category,
+          user,
+        });
+
+        if (result) {
+          submitted = true;
+          setMessage({
+            type: "success",
+            text: "🎉 Your community post is live!",
+          });
+        } else {
+          errorMsg =
+            "Failed to post to community. Make sure community posts table is created in Supabase.";
+        }
+      }
+
+      if (!submitted && errorMsg) {
+        setMessage({
+          type: "error",
+          text: errorMsg,
+        });
+      }
+
+      if (submitted) {
+        setPostForm({
+          title: "",
+          description: "",
+          content: "",
+          image: "",
+          location: user.location,
+          category: categories[0],
+        });
+
+        // Redirect after 1.5 seconds
+        setTimeout(() => {
+          navigate("/");
+        }, 1500);
+      }
+    } catch (error) {
+      console.error("Post submission error:", error);
+      setMessage({
+        type: "error",
+        text: "An unexpected error occurred. Please try again.",
       });
+    } finally {
+      setPosting(false);
     }
-    setPosting(false);
   };
 
   if (loading) {
@@ -109,6 +162,18 @@ export default function Post() {
         <h2>Post to Community</h2>
         <p>Share a quick head-up or a full community post.</p>
       </div>
+
+      {message && (
+        <div className={`lp-message lp-message-${message.type}`}>
+          {message.type === "success" ? (
+            <CheckCircle size={20} />
+          ) : (
+            <AlertCircle size={20} />
+          )}
+          <span>{message.text}</span>
+        </div>
+      )}
+
       <form className="lp-form lp-post-form" onSubmit={handlePost}>
         <fieldset className="lp-post-destination">
           <legend>Where should this post go?</legend>

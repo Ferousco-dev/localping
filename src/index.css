@@ -1562,6 +1562,41 @@ p {
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.08);
 }
 
+.lp-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid;
+  font-weight: 500;
+  font-size: 14px;
+  animation: slideDown 0.3s ease;
+}
+
+.lp-message-success {
+  background: rgba(46, 125, 50, 0.08);
+  border-color: #2e7d32;
+  color: #2e7d32;
+}
+
+.lp-message-error {
+  background: rgba(211, 47, 47, 0.08);
+  border-color: #d32f2f;
+  color: #d32f2f;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .lp-post-form {
   padding: 22px;
   border-radius: 18px;
