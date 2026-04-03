@@ -41,7 +41,7 @@ export default function Post() {
 
     if (postDestination === "news") {
       // Submit to news table (requires admin approval)
-      submitted = await submitCommunityNews({
+      submitted = !!(await submitCommunityNews({
         title: postForm.title,
         description: postForm.description,
         content: postForm.content,
@@ -50,10 +50,10 @@ export default function Post() {
         category: postForm.category,
         communityKind: postKind,
         user,
-      });
+      }));
     } else {
       // Submit directly to community posts table (instant)
-      submitted = await submitDirectCommunityPost({
+      submitted = !!(await submitDirectCommunityPost({
         title: postForm.title,
         description: postForm.description,
         content: postForm.content,
@@ -61,7 +61,7 @@ export default function Post() {
         location: postForm.location,
         category: postForm.category,
         user,
-      });
+      }));
     }
 
     if (submitted) {

@@ -9,7 +9,6 @@ import {
   toggleCommunityLike,
   getLikeCount,
   checkUserLiked,
-  getCommunityPosts,
 } from "../lib/news";
 import type { NewsItem } from "../lib/types";
 import { useSearchParams } from "react-router-dom";
@@ -203,18 +202,20 @@ export default function Community() {
       setLoading(true);
       setError("");
     });
+
     const kindFilter =
       activeKind === "updates"
         ? "update"
         : activeKind === "posts"
         ? "post"
         : "all";
+
     getCommunityNewsByLocation(location, activeCategory, kindFilter)
-      .then((items) => {
+      .then((newsItems) => {
         if (active) {
-          setPosts(items);
+          setPosts(newsItems || []);
           // Load engagement data for all posts
-          items.forEach((item) => {
+          newsItems?.forEach((item) => {
             loadEngagementData(item.id);
           });
         }
@@ -225,6 +226,7 @@ export default function Community() {
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
