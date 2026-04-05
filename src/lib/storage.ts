@@ -11,7 +11,6 @@ const KEYS = {
   customNews: 'localping_custom_news',
   deletedNews: 'localping_deleted_news',
   newsCache: 'localping_news_cache',
-  apiUpdatesEnabled: 'localping_api_updates_enabled',
 }
 
 type NewsCache = {
@@ -130,14 +129,6 @@ export function setCurrentUserId(id: string | null) {
   } else {
     window.localStorage.removeItem(KEYS.currentUser)
   }
-}
-
-export function getApiUpdatesEnabled(): boolean {
-  return read<boolean>(KEYS.apiUpdatesEnabled, true)
-}
-
-export function setApiUpdatesEnabled(enabled: boolean) {
-  write(KEYS.apiUpdatesEnabled, enabled)
 }
 
 export function getLikesMap(): Record<string, string[]> {

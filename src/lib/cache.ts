@@ -50,3 +50,18 @@ export function invalidateCache(key: string) {
   if (typeof window === 'undefined') return
   window.sessionStorage.removeItem(key)
 }
+
+export function invalidateCacheByPrefix(prefix: string) {
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith(prefix)) {
+      memoryCache.delete(key)
+    }
+  }
+  if (typeof window === 'undefined') return
+  for (let i = window.sessionStorage.length - 1; i >= 0; i -= 1) {
+    const key = window.sessionStorage.key(i)
+    if (key && key.startsWith(prefix)) {
+      window.sessionStorage.removeItem(key)
+    }
+  }
+}

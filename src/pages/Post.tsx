@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { submitCommunityNews, submitDirectCommunityPost } from "../lib/news";
+import { submitCommunityNews } from "../lib/news";
 import { AlertCircle, CheckCircle } from "lucide-react";
 
 const categories = [
@@ -21,7 +21,7 @@ export default function Post() {
   const [posting, setPosting] = useState(false);
   const [postKind, setPostKind] = useState<"update" | "post">("update");
   const [postDestination, setPostDestination] = useState<"news" | "community">(
-    "community"
+    user?.isVerified ? "community" : "news"
   );
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -29,7 +29,6 @@ export default function Post() {
   } | null>(null);
   const [postForm, setPostForm] = useState({
     title: "",
-    description: "",
     content: "",
     image: "",
     location: user?.location || "",
@@ -38,9 +37,30 @@ export default function Post() {
   const formatLabel = (value: string) =>
     value.charAt(0).toUpperCase() + value.slice(1);
 
+  const getFirstLine = (text: string) => {
+    if (!text) return "";
+    return text.split(/\r?\n/).find((line) => line.trim())?.trim() || "";
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    if (!user.isVerified && postDestination === "community") {
+      setPostDestination("news");
+    }
+  }, [user, postDestination]);
+
   const handlePost = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user || posting) return;
+
+    // Prevent posting to community if not verified
+    if (postDestination === "community" && !user.isVerified) {
+      setMessage({
+        type: "error",
+        text: "❌ Only verified users can post to the community. Please submit to News for admin review instead.",
+      });
+      return;
+    }
 
     setMessage(null);
     setPosting(true);
@@ -48,18 +68,23 @@ export default function Post() {
     let submitted = false;
     let errorMsg = "";
 
+    const destination = postDestination;
+
+    const descriptionFromContent = getFirstLine(postForm.content);
+
     try {
       if (postDestination === "news") {
         // Submit to news table (requires admin approval)
         console.log("Submitting to news table...");
         const result = await submitCommunityNews({
           title: postForm.title,
-          description: postForm.description,
+          description: descriptionFromContent,
           content: postForm.content,
           image: postForm.image,
           location: postForm.location,
           category: postForm.category,
           communityKind: postKind,
+          newsType: "update",
           user,
         });
 
@@ -73,15 +98,18 @@ export default function Post() {
           errorMsg = "Failed to submit news post. Please try again.";
         }
       } else {
-        // Submit directly to community posts table (instant)
-        console.log("Submitting to community posts table...");
-        const result = await submitDirectCommunityPost({
+        // Submit to community feed (instant publish for verified users)
+        console.log("Submitting to community feed...");
+        const result = await submitCommunityNews({
           title: postForm.title,
-          description: postForm.description,
+          description: descriptionFromContent,
           content: postForm.content,
           image: postForm.image,
           location: postForm.location,
           category: postForm.category,
+          communityKind: "post",
+          newsType: "community",
+          autoPublish: true,
           user,
         });
 
@@ -92,8 +120,7 @@ export default function Post() {
             text: "🎉 Your community post is live!",
           });
         } else {
-          errorMsg =
-            "Failed to post to community. Make sure community posts table is created in Supabase.";
+          errorMsg = "Failed to post to community. Please try again.";
         }
       }
 
@@ -107,7 +134,6 @@ export default function Post() {
       if (submitted) {
         setPostForm({
           title: "",
-          description: "",
           content: "",
           image: "",
           location: user.location,
@@ -116,7 +142,7 @@ export default function Post() {
 
         // Redirect after 1.5 seconds
         setTimeout(() => {
-          navigate("/");
+          navigate(destination === "community" ? "/community" : "/");
         }, 1500);
       }
     } catch (error) {
@@ -156,11 +182,23 @@ export default function Post() {
     );
   }
 
+  // Show warning only if trying to post to community AND not verified
+  const showVerificationWarning =
+    !user.isVerified && postDestination === "community";
+
   return (
     <section className="lp-page lp-post">
       <div className="lp-post-hero">
-        <h2>Post to Community</h2>
-        <p>Share a quick head-up or a full community post.</p>
+        <h2>
+          {postDestination === "community"
+            ? "Post to Community"
+            : "Submit to News"}
+        </h2>
+        <p>
+          {postDestination === "community"
+            ? "Share a quick update with your neighborhood."
+            : "Send a report for admin review and approval."}
+        </p>
       </div>
 
       {message && (
@@ -171,6 +209,16 @@ export default function Post() {
             <AlertCircle size={20} />
           )}
           <span>{message.text}</span>
+        </div>
+      )}
+
+      {showVerificationWarning && (
+        <div className="lp-message lp-message-error">
+          <AlertCircle size={20} />
+          <span>
+            Only verified users can post directly to the community. Submit to
+            News for admin review instead.
+          </span>
         </div>
       )}
 
@@ -189,10 +237,11 @@ export default function Post() {
                 value="community"
                 checked={postDestination === "community"}
                 onChange={() => setPostDestination("community")}
+                disabled={!user.isVerified}
               />
               <div className="lp-destination-content">
-                <strong>Community (Post instantly)</strong>
-                <p>Your post appears immediately in the community feed</p>
+                <strong>Community</strong>
+                <p>Live immediately for local readers.</p>
               </div>
             </label>
             <label
@@ -208,24 +257,26 @@ export default function Post() {
                 onChange={() => setPostDestination("news")}
               />
               <div className="lp-destination-content">
-                <strong>News (Admin approval)</strong>
-                <p>Your post is submitted for review before publishing</p>
+                <strong>News</strong>
+                <p>Reviewed by admins before publishing.</p>
               </div>
             </label>
           </div>
         </fieldset>
-        <label>
-          Post type
-          <select
-            value={postKind}
-            onChange={(event) =>
-              setPostKind(event.target.value as "update" | "post")
-            }
-          >
-            <option value="update">Update (brief)</option>
-            <option value="post">Community post</option>
-          </select>
-        </label>
+        {postDestination === "news" && (
+          <label>
+            Post type
+            <select
+              value={postKind}
+              onChange={(event) =>
+                setPostKind(event.target.value as "update" | "post")
+              }
+            >
+              <option value="update">Update (brief)</option>
+              <option value="post">Community post</option>
+            </select>
+          </label>
+        )}
         <label>
           Headline
           <input
@@ -237,16 +288,6 @@ export default function Post() {
           />
         </label>
         <label>
-          Short summary
-          <input
-            value={postForm.description}
-            onChange={(event) =>
-              setPostForm({ ...postForm, description: event.target.value })
-            }
-            required={postKind === "update"}
-          />
-        </label>
-        <label>
           Full story
           <textarea
             rows={5}
@@ -254,7 +295,7 @@ export default function Post() {
             onChange={(event) =>
               setPostForm({ ...postForm, content: event.target.value })
             }
-            required={postKind === "post"}
+            required
           />
         </label>
         <label>
@@ -292,9 +333,22 @@ export default function Post() {
             </select>
           </label>
         </div>
-        <button className="lp-button" type="submit" disabled={posting}>
+        <button
+          className="lp-button"
+          type="submit"
+          disabled={
+            posting || (postDestination === "community" && !user.isVerified)
+          }
+          title={
+            postDestination === "community" && !user.isVerified
+              ? "Only verified users can post to community"
+              : ""
+          }
+        >
           {posting
             ? "Posting..."
+            : postDestination === "community" && !user.isVerified
+            ? "Verification Required"
             : postDestination === "community"
             ? "Publish to community"
             : "Submit for approval"}

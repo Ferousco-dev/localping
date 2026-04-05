@@ -1,13 +1,12 @@
 import mockNews from "../data/mock-news.json";
 import type { NewsItem, User } from "./types";
-import { getCache, invalidateCache, setCache } from "./cache";
+import {
+  getCache,
+  invalidateCache,
+  invalidateCacheByPrefix,
+  setCache,
+} from "./cache";
 import { isSupabaseConfigured, supabase } from "./supabase";
-
-const GNEWS_API_KEY = import.meta.env.VITE_GNEWS_API_KEY as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as
-  | string
-  | undefined;
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 
 function normalizeLocation(location: string) {
   const clean = location.trim();
@@ -60,129 +59,6 @@ function getMockNews(location: string): NewsItem[] {
     ...item,
     location,
   }));
-}
-
-async function fetchGNews(location: string): Promise<NewsItem[]> {
-  if (!GNEWS_API_KEY) return [];
-  const query = encodeURIComponent(location);
-  const searchUrl = `https://gnews.io/api/v4/search?q=${query}&lang=en&max=10&token=${GNEWS_API_KEY}`;
-  const response = await fetch(searchUrl);
-  if (!response.ok) {
-    const fallbackUrl = `https://gnews.io/api/v4/top-headlines?country=ng&lang=en&max=10&token=${GNEWS_API_KEY}`;
-    const fallbackResponse = await fetch(fallbackUrl);
-    if (!fallbackResponse.ok) return [];
-    const fallbackData = (await fallbackResponse.json()) as {
-      articles: Array<{
-        title: string;
-        description: string;
-        content: string;
-        image?: string;
-        source: { name: string };
-        publishedAt: string;
-        url: string;
-      }>;
-    };
-    return fallbackData.articles.map((article) => ({
-      id: `gnews-${article.url}`,
-      title: article.title,
-      description: article.description || "Local update",
-      content:
-        article.content ||
-        article.description ||
-        "Full story available at source.",
-      image:
-        article.image ||
-        "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=640&q=80",
-      source: article.source?.name || "GNews",
-      date: article.publishedAt,
-      url: article.url,
-      location,
-    }));
-  }
-  const data = (await response.json()) as {
-    articles: Array<{
-      title: string;
-      description: string;
-      content: string;
-      image?: string;
-      source: { name: string };
-      publishedAt: string;
-      url: string;
-    }>;
-  };
-  return data.articles.map((article) => ({
-    id: `gnews-${article.url}`,
-    title: article.title,
-    description: article.description || "Local update",
-    content:
-      article.content ||
-      article.description ||
-      "Full story available at source.",
-    image:
-      article.image ||
-      "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=640&q=80",
-    source: article.source?.name || "GNews",
-    date: article.publishedAt,
-    url: article.url,
-    location,
-  }));
-}
-
-async function fetchPunchNews(): Promise<NewsItem[]> {
-  try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return [];
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/punch-proxy`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        apikey: SUPABASE_ANON_KEY,
-      },
-    });
-    if (!response.ok) return [];
-    const xmlText = await response.text();
-    if (!xmlText) return [];
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, "text/xml");
-    const items = Array.from(doc.querySelectorAll("item"));
-    return items.slice(0, 10).map((item) => {
-      const title =
-        item.querySelector("title")?.textContent?.trim() || "Punch News";
-      const link = item.querySelector("link")?.textContent?.trim() || "";
-      const description =
-        item.querySelector("description")?.textContent?.trim() ||
-        "Punch update";
-      const pubDate =
-        item.querySelector("pubDate")?.textContent?.trim() ||
-        new Date().toISOString();
-      const mediaContent = item.querySelector("media\\:content");
-      const image = mediaContent?.getAttribute("url") || "";
-      return {
-        id: `punch-${link || title}`,
-        title,
-        description,
-        content: description,
-        image:
-          image ||
-          "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=640&q=80",
-        source: "Punch News",
-        date: pubDate,
-        url: link || undefined,
-        location: "Nigeria",
-      };
-    });
-  } catch {
-    return [];
-  }
-}
-
-function mergeFeed(items: NewsItem[]) {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = `${item.title}-${item.source}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 async function persistNewsCache(items: NewsItem[]) {
@@ -279,8 +155,62 @@ async function getApprovedCommunityNews(
   return data.map(mapNews);
 }
 
+async function getApprovedNewsUpdates(location: string): Promise<NewsItem[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("news")
+    .select("*")
+    .eq("news_type", "update")
+    .eq("status", "approved")
+    .in("location", [location, "All"])
+    .order("published_at", { ascending: false })
+    .limit(50);
+  if (error || !data) return [];
+  return data.map(mapNews);
+}
+
 export async function getNewsByLocation(location: string): Promise<NewsItem[]> {
-  return getCommunityNewsByLocation(location);
+  const requestedLocation = normalizeLocation(location);
+  const cacheKey = `news:updates:${requestedLocation}`;
+  const cached = getCache<NewsItem[]>(cacheKey);
+  if (cached) return cached;
+
+  if (supabase) {
+    const updates = await getApprovedNewsUpdates(requestedLocation);
+    if (updates.length) {
+      setCache(cacheKey, updates);
+      cacheLatest(updates);
+      return updates;
+    }
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    const items = getMockNews(requestedLocation);
+    const mapped = items.map((item) => ({
+      ...item,
+      newsType: "update" as const,
+      communityKind: "update" as const,
+    }));
+    if (mapped.length) setCache(cacheKey, mapped);
+    cacheLatest(mapped);
+    return mapped;
+  }
+
+  const { data, error } = await supabase
+    .from("news")
+    .select("*")
+    .eq("news_type", "update")
+    .eq("status", "approved")
+    .order("published_at", { ascending: false })
+    .limit(30);
+
+  if (error || !data || data.length === 0) return [];
+
+  const items = data.map(mapNews);
+  if (items.length) setCache(cacheKey, items);
+  cacheLatest(items);
+  await persistNewsCache(items);
+  return items;
 }
 
 export async function getCommunityNewsByLocation(
@@ -392,34 +322,12 @@ export async function getUpdatesNews(): Promise<NewsItem[]> {
   const { data, error } = await supabase
     .from("news")
     .select("*")
-    .eq("news_type", "community")
-    .eq("community_kind", "update")
+    .eq("news_type", "update")
     .eq("status", "approved")
     .order("published_at", { ascending: false })
     .limit(50);
   if (error || !data) return [];
   return data.map(mapNews);
-}
-
-export async function getApiUpdates(location: string): Promise<NewsItem[]> {
-  const requestedLocation = normalizeLocation(location);
-  const cacheKey = `news:api:${requestedLocation}`;
-  const cached = getCache<NewsItem[]>(cacheKey);
-  if (cached) return cached;
-  const [gnewsItems, punchItems] = await Promise.all([
-    fetchGNews(requestedLocation),
-    fetchPunchNews(),
-  ]);
-  const apiItems = mergeFeed([...gnewsItems, ...punchItems]).map((item) => ({
-    ...item,
-    category: "general",
-    newsType: "update" as const,
-  }));
-  if (apiItems.length) {
-    setCache(cacheKey, apiItems);
-    await persistNewsCache(apiItems);
-  }
-  return apiItems;
 }
 
 export async function submitCommunityNews(input: {
@@ -431,12 +339,18 @@ export async function submitCommunityNews(input: {
   category?: string;
   source?: string;
   communityKind?: "update" | "post";
+  newsType?: "community" | "update";
+  autoPublish?: boolean;
   user: User;
 }) {
   if (!supabase) return null;
-  const autoPublish = input.user.autoPublish ?? false;
+  const autoPublish =
+    typeof input.autoPublish === "boolean"
+      ? input.autoPublish
+      : input.user.autoPublish ?? false;
   const now = new Date().toISOString();
   const communityKind = input.communityKind ?? "post";
+  const newsType = input.newsType ?? "community";
   const description =
     input.description?.trim() ||
     (communityKind === "update" ? "Community update" : "Community post");
@@ -451,7 +365,7 @@ export async function submitCommunityNews(input: {
     source: input.source?.trim() || `${input.user.name} (Community)`,
     location: input.location?.trim() || "All",
     category: input.category?.trim().toLowerCase() || "general",
-    news_type: "community",
+    news_type: newsType,
     community_kind: communityKind,
     status: autoPublish ? "approved" : "pending",
     verified: autoPublish,
@@ -466,6 +380,8 @@ export async function submitCommunityNews(input: {
     .select("*")
     .single();
   if (error || !data) return null;
+  invalidateCacheByPrefix("news:community:");
+  invalidateCacheByPrefix("news:updates:");
   if (autoPublish) {
     await supabase.from("news_cache").upsert(
       {
@@ -491,7 +407,7 @@ export async function getPendingNewsByUser(userId: string) {
     .from("news")
     .select("*")
     .eq("status", "pending")
-    .eq("news_type", "community")
+    .eq("news_type", "update")
     .eq("author_id", userId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];

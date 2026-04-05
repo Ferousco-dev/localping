@@ -222,7 +222,7 @@ function ProfileContent({
           onClick={() => setActiveTab("pending")}
         >
           <Inbox size={16} />
-          Pending
+          News (Pending)
           <span>{pendingPosts.length}</span>
         </button>
         <button
@@ -286,7 +286,7 @@ function ProfileContent({
           <div className="lp-tab-pane">
             {pendingPosts.length === 0 ? (
               <div className="lp-empty-message">
-                <p>No pending posts</p>
+                <p>No pending news submissions</p>
               </div>
             ) : (
               <div className="lp-posts-list">

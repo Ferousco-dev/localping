@@ -1,108 +1,25 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import {
-  getCommunityNewsByLocation,
-  getViewCount,
-  getLikeCount,
-  checkUserLiked,
-  getCommentCount,
-} from "../lib/news";
+import { getNewsByLocation } from "../lib/news";
 import type { NewsItem } from "../lib/types";
-import {
-  MapPin,
-  Eye,
-  Heart,
-  MessageCircle,
-  AlertCircle,
-  Inbox,
-  TrendingUp,
-} from "lucide-react";
-
-const categoryColors: Record<string, string> = {
-  traffic: "#F7DC6F",
-  accident: "#FF6B9D",
-  incident: "#C7CEEA",
-  event: "#FF6B6B",
-  government: "#4ECDC4",
-  school: "#45B7D1",
-  community: "#FFA07A",
-  service: "#98D8C8",
-};
-
-type EngagementData = {
-  views: number;
-  likes: number;
-  isLiked: boolean;
-  comments: number;
-};
-
-type EngagementMap = Record<string, EngagementData>;
+import { MapPin, AlertCircle, Inbox, TrendingUp } from "lucide-react";
 
 export default function Home() {
   const { user } = useAuth();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [engagement, setEngagement] = useState<EngagementMap>({});
   const [activeSection, setActiveSection] = useState<"latest" | "incidents">(
     "latest"
   );
 
   const location = user?.location || "Lagos, Nigeria";
 
-  const formatLabel = (value: string) =>
-    value.charAt(0).toUpperCase() + value.slice(1);
-  const getTimeAgo = (date: string) => {
-    const now = new Date();
-    const posted = new Date(date);
-    const diff = now.getTime() - posted.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return posted.toLocaleDateString();
-  };
-
-  const loadEngagementData = useCallback(
-    async (postId: string) => {
-      if (!postId) return;
-      try {
-        const [viewsCount, likesCount, isLiked, commentsCount] =
-          await Promise.all([
-            getViewCount(postId),
-            getLikeCount(postId),
-            user?.id ? checkUserLiked(postId, user.id) : Promise.resolve(false),
-            getCommentCount(postId),
-          ]);
-
-        setEngagement((prev) => ({
-          ...prev,
-          [postId]: {
-            views: viewsCount || 0,
-            likes: likesCount || 0,
-            isLiked: isLiked || false,
-            comments: commentsCount || 0,
-          },
-        }));
-      } catch (e) {
-        console.error("Failed to load engagement data:", e);
-      }
-    },
-    [user?.id]
-  );
-
-  const getEngagement = (postId: string): EngagementData => {
-    return (
-      engagement[postId] || {
-        views: 0,
-        likes: 0,
-        isLiked: false,
-        comments: 0,
-      }
-    );
+  const trimWords = (text: string, limit: number) => {
+    const words = text.trim().split(/\s+/);
+    if (words.length <= limit) return text.trim();
+    return `${words.slice(0, limit).join(" ")}…`;
   };
 
   useEffect(() => {
@@ -112,13 +29,10 @@ export default function Home() {
       setLoading(true);
       setError("");
     });
-    getCommunityNewsByLocation(location)
+    getNewsByLocation(location)
       .then((items) => {
         if (active) {
           setNews(items || []);
-          items?.forEach((item) => {
-            loadEngagementData(item.id);
-          });
         }
       })
       .catch(() => {
@@ -130,7 +44,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [location, loadEngagementData]);
+  }, [location]);
 
   const incidentCategories = ["traffic", "accident", "incident"];
   const displayedNews =
@@ -210,57 +124,26 @@ export default function Home() {
           </div>
         ) : (
           displayedNews.map((item) => {
-            const eng = getEngagement(item.id);
-            const categoryColor =
-              categoryColors[item.category || "community"] || "#999";
             return (
               <Link
                 key={item.id}
                 to={`/news/${encodeURIComponent(item.id)}`}
                 className="lp-feed-item-link"
               >
-                <div className="lp-feed-item">
-                  <div className="lp-feed-item-content">
-                    <div className="lp-feed-header">
-                      <div className="lp-feed-meta">
-                        <span className="lp-feed-source">
-                          {item.source || item.authorName}
-                        </span>
-                        <span className="lp-feed-time">
-                          {getTimeAgo(item.date)}
-                        </span>
-                      </div>
-                      <span
-                        className="lp-feed-category"
-                        style={{ backgroundColor: categoryColor }}
-                      >
-                        {item.category ? formatLabel(item.category) : "News"}
-                      </span>
-                    </div>
-                    <h3 className="lp-feed-title">{item.title}</h3>
+                <div className="lp-home-card">
+                  <div className="lp-home-card-text">
+                    <h3 className="lp-home-card-title">{item.title}</h3>
                     {item.description && (
-                      <p className="lp-feed-description">{item.description}</p>
+                      <p className="lp-home-card-description">
+                        {trimWords(item.description, 16)}
+                      </p>
                     )}
-                    {item.image && (
-                      <div className="lp-feed-image">
-                        <img src={item.image} alt={item.title} />
-                      </div>
-                    )}
-                    <div className="lp-feed-footer">
-                      <span className="lp-feed-stat">
-                        <Eye size={16} />
-                        {eng.views}
-                      </span>
-                      <span className="lp-feed-stat">
-                        <MessageCircle size={16} />
-                        {eng.comments}
-                      </span>
-                      <span className="lp-feed-stat">
-                        <Heart size={16} />
-                        {eng.likes}
-                      </span>
-                    </div>
                   </div>
+                  {item.image && (
+                    <div className="lp-home-card-image">
+                      <img src={item.image} alt={item.title} />
+                    </div>
+                  )}
                 </div>
               </Link>
             );
