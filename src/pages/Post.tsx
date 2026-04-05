@@ -39,7 +39,12 @@ export default function Post() {
 
   const getFirstLine = (text: string) => {
     if (!text) return "";
-    return text.split(/\r?\n/).find((line) => line.trim())?.trim() || "";
+    return (
+      text
+        .split(/\r?\n/)
+        .find((line) => line.trim())
+        ?.trim() || ""
+    );
   };
 
   useEffect(() => {
@@ -241,7 +246,7 @@ export default function Post() {
               />
               <div className="lp-destination-content">
                 <strong>Community</strong>
-                <p>Live immediately for local readers.</p>
+                <p>..</p>
               </div>
             </label>
             <label
@@ -258,7 +263,7 @@ export default function Post() {
               />
               <div className="lp-destination-content">
                 <strong>News</strong>
-                <p>Reviewed by admins before publishing.</p>
+                <p>..</p>
               </div>
             </label>
           </div>
